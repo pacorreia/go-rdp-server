@@ -43,6 +43,8 @@ type Session struct {
 }
 
 func (s *Session) Run(ctx context.Context) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	defer func() {
 		s.Events <- broker.SessionEvent{SessionID: s.ID, Type: broker.SessionClosed}
 		_ = s.Conn.Close()

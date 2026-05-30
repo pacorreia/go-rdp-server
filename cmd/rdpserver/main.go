@@ -44,7 +44,6 @@ func runServer(ctx context.Context) error {
 	maxSessions := getEnvInt("MAX_SESSIONS", 10)
 
 	credRequests := make(chan broker.CredRequest)
-	credResponses := make(chan broker.CredResponse)
 	sessionEvents := make(chan broker.SessionEvent, 128)
 	brokerEvents := make(chan broker.SessionEvent, 128)
 	managerEvents := make(chan broker.SessionEvent, 128)
@@ -75,10 +74,9 @@ func runServer(ctx context.Context) error {
 	}()
 
 	credentialBroker := &broker.Broker{
-		Requests:  credRequests,
-		Responses: credResponses,
-		Events:    brokerEvents,
-		Shutdown:  shutdown,
+		Requests: credRequests,
+		Events:   brokerEvents,
+		Shutdown: shutdown,
 	}
 	manager := session.NewManager(maxSessions, managerEvents, shutdown)
 	handlers := &web.Handlers{

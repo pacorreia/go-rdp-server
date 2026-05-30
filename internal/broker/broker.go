@@ -55,7 +55,6 @@ func (winAccountManager) AddToRDPGroup(username string) error  { return AddToRDP
 // Broker handles temp account lifecycle using channels only.
 type Broker struct {
 	Requests  <-chan CredRequest
-	Responses chan<- CredResponse
 	Events    <-chan SessionEvent
 	Shutdown  <-chan struct{}
 
@@ -121,10 +120,6 @@ func (b *Broker) Run(ctx context.Context) {
 func (b *Broker) respond(req CredRequest, response CredResponse) {
 	if req.Reply != nil {
 		req.Reply <- response
-		return
-	}
-	if b.Responses != nil {
-		b.Responses <- response
 	}
 }
 
