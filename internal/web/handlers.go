@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,9 +28,19 @@ type Handlers struct {
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
+	CheckOrigin:     isAllowedOrigin,
+}
+
+func isAllowedOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
 		return true
-	},
+	}
+	originURL, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(originURL.Host, r.Host)
 }
 
 func (h *Handlers) HandleRDPWebSocket(w http.ResponseWriter, r *http.Request) {

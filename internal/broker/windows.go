@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	userPrivUser         = 1
+	userPrivilegeUser    = 1
 	ufScript             = 0x0001
 	ufDontExpirePassword = 0x10000
 )
@@ -32,12 +32,12 @@ type localGroupMembersInfo3 struct {
 }
 
 var (
-	netapi32                   = syscall.NewLazyDLL("netapi32.dll")
-	advapi32                   = syscall.NewLazyDLL("advapi32.dll")
-	procNetUserAdd             = netapi32.NewProc("NetUserAdd")
-	procNetUserDel             = netapi32.NewProc("NetUserDel")
-	procNetLocalGroupAddMember = netapi32.NewProc("NetLocalGroupAddMembers")
-	procLogonUserW             = advapi32.NewProc("LogonUserW")
+	netapi32                    = syscall.NewLazyDLL("netapi32.dll")
+	advapi32                    = syscall.NewLazyDLL("advapi32.dll")
+	procNetUserAdd              = netapi32.NewProc("NetUserAdd")
+	procNetUserDel              = netapi32.NewProc("NetUserDel")
+	procNetLocalGroupAddMembers = netapi32.NewProc("NetLocalGroupAddMembers")
+	procLogonUserW              = advapi32.NewProc("LogonUserW")
 )
 
 func CreateTempUser(username, password string) error {
@@ -53,7 +53,7 @@ func CreateTempUser(username, password string) error {
 	user := userInfo1{
 		Name:     namePtr,
 		Password: passwordPtr,
-		Priv:     userPrivUser,
+		Priv:     userPrivilegeUser,
 		Flags:    ufScript | ufDontExpirePassword,
 	}
 
@@ -94,7 +94,7 @@ func AddToRDPGroup(username string) error {
 	}
 
 	member := localGroupMembersInfo3{DomainAndName: userPtr}
-	ret, _, _ := procNetLocalGroupAddMember.Call(
+	ret, _, _ := procNetLocalGroupAddMembers.Call(
 		0,
 		uintptr(unsafe.Pointer(groupPtr)),
 		3,
