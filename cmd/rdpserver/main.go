@@ -6,10 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
-	"os/signal"
 	"strconv"
-	"syscall"
 	"time"
 
 	"github.com/pacorreia/go-rdp-server/internal/broker"
@@ -18,15 +15,32 @@ import (
 )
 
 func main() {
+	handled, err := runAsWindowsService()
+	if err != nil {
+		log.Fatalf("windows service setup failed: %v", err)
+	}
+	if handled {
+		return
+	}
+
+	if err := runConsole(); err != nil {
+		log.Fatalf("server exited with error: %v", err)
+	}
+}
+
+func runConsole() error {
+	ctx, stop := signalNotifyContext(context.Background())
+	defer stop()
+	return runServer(ctx)
+}
+
+func runServer(ctx context.Context) error {
 	guacdHost := getEnv("GUACD_HOST", "127.0.0.1")
 	guacdPort := getEnv("GUACD_PORT", "4822")
 	rdpHost := getEnv("RDP_HOST", "127.0.0.1")
 	rdpPort := getEnv("RDP_PORT", "3389")
 	httpPort := getEnv("HTTP_PORT", "8080")
 	maxSessions := getEnvInt("MAX_SESSIONS", 10)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	credRequests := make(chan broker.CredRequest)
 	credResponses := make(chan broker.CredResponse)
@@ -53,21 +67,19 @@ func main() {
 
 	go credentialBroker.Run(ctx)
 	go manager.Run(ctx)
+	errCh := make(chan error, 1)
 	go func() {
 		if err := server.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("http server error: %v", err)
-			cancel()
+			errCh <- fmt.Errorf("http server error: %w", err)
 		}
 	}()
 
 	log.Printf("rdp server listening on :%s", httpPort)
 
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-
+	var runErr error
 	select {
 	case <-ctx.Done():
-	case <-sigCh:
+	case runErr = <-errCh:
 	}
 
 	close(shutdown)
@@ -76,6 +88,7 @@ func main() {
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Printf("graceful shutdown failed: %v", err)
 	}
+	return runErr
 }
 
 func getEnv(key, fallback string) string {
