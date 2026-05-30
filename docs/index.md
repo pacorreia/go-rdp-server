@@ -1,3 +1,9 @@
+---
+layout: default
+title: Home
+nav_order: 1
+---
+
 # go-rdp-server documentation
 
 Welcome to the Zensical-based documentation set for `go-rdp-server`.

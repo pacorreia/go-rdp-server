@@ -2,3 +2,11 @@ title: go-rdp-server docs
 description: Zensical documentation for go-rdp-server
 theme: minima
 markdown: kramdown
+baseurl: /go-rdp-server
+header_pages:
+  - index.md
+  - architecture.md
+  - configuration.md
+  - windows-service.md
+  - development.md
+  - zensical.md
