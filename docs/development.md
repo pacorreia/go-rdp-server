@@ -1,3 +1,9 @@
+---
+layout: default
+title: Development and Release
+nav_order: 5
+---
+
 # Development and release
 
 ## Validate locally
