@@ -25,7 +25,11 @@ func NewServer(addr string, handlers *Handlers) *Server {
 	}
 }
 
-func serveIndex(w http.ResponseWriter, _ *http.Request) {
+func serveIndex(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
 	content, err := fs.ReadFile(ui.Assets, "index.html")
 	if err != nil {
 		http.Error(w, "unable to load ui", http.StatusInternalServerError)
