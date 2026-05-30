@@ -1,6 +1,7 @@
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>
   document.addEventListener('DOMContentLoaded', function () {
+    mermaid.initialize({ startOnLoad: false, theme: 'neutral' });
     document.querySelectorAll('code.language-mermaid').forEach(function (el) {
       var wrapper = el.closest('div.language-mermaid') || el.parentNode;
       var div = document.createElement('div');
@@ -8,6 +9,6 @@
       div.textContent = el.textContent;
       wrapper.parentNode.replaceChild(div, wrapper);
     });
-    mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
+    mermaid.run();
   });
 </script>
