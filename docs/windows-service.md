@@ -17,19 +17,42 @@ sc.exe description go-rdp-server "WebSocket to guacd RDP bridge service"
 ## Operate
 
 ```powershell
+# Start the service
 sc.exe start go-rdp-server
+
+# Stop the service
 sc.exe stop go-rdp-server
+
+# Query service status
 sc.exe query go-rdp-server
 ```
 
-## Best practices
+## Harden
 
-- Use a dedicated least-privilege account for the service identity.
-- Configure automatic restart on transient failures:
+!!! warning "Service account"
+    Run the service under a dedicated least-privilege account, not `LocalSystem`. Restrict the account to the minimum rights needed to create local users and connect to `guacd`.
 
-  ```powershell
-  sc.exe failure go-rdp-server reset= 86400 actions= restart/5000/restart/5000/restart/5000
-  ```
+!!! tip "Automatic restart"
+    Configure automatic restart on transient failures to keep the gateway available:
 
-- Ensure `guacd` availability before service startup.
-- Restrict inbound HTTP/WebSocket traffic to trusted origins and networks.
+    ```powershell
+    sc.exe failure go-rdp-server reset= 86400 actions= restart/5000/restart/5000/restart/5000
+    ```
+
+!!! note "Dependency ordering"
+    Ensure `guacd` is reachable before the service starts. Add it as a service dependency if `guacd` is also managed by the SCM:
+
+    ```powershell
+    sc.exe config go-rdp-server depend= guacd
+    ```
+
+## Firewall
+
+Restrict inbound HTTP/WebSocket traffic to trusted origins. Example with Windows Firewall:
+
+```powershell
+# Allow only a specific management subnet on port 8080
+New-NetFirewallRule -DisplayName "go-rdp-server" `
+    -Direction Inbound -Protocol TCP -LocalPort 8080 `
+    -RemoteAddress 10.0.0.0/24 -Action Allow
+```
