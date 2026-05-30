@@ -38,36 +38,62 @@ type SessionEvent struct {
 	Err       error
 }
 
+type accountManager interface {
+	CreateTempUser(username, password string) error
+	DeleteTempUser(username string) error
+	AddToRDPGroup(username string) error
+}
+
+type winAccountManager struct{}
+
+func (winAccountManager) CreateTempUser(username, password string) error {
+	return CreateTempUser(username, password)
+}
+func (winAccountManager) DeleteTempUser(username string) error { return DeleteTempUser(username) }
+func (winAccountManager) AddToRDPGroup(username string) error  { return AddToRDPGroup(username) }
+
 // Broker handles temp account lifecycle using channels only.
 type Broker struct {
 	Requests  <-chan CredRequest
 	Responses chan<- CredResponse
 	Events    <-chan SessionEvent
 	Shutdown  <-chan struct{}
+
+	Accounts          accountManager
+	PasswordGenerator func() (string, error)
 }
 
 // Run starts broker loop.
 func (b *Broker) Run(ctx context.Context) {
+	accounts := b.Accounts
+	if accounts == nil {
+		accounts = winAccountManager{}
+	}
+	passwordGenerator := b.PasswordGenerator
+	if passwordGenerator == nil {
+		passwordGenerator = generatePassword
+	}
+
 	sessionAccounts := make(map[string]string)
 	for {
 		select {
 		case <-ctx.Done():
-			b.cleanupAll(sessionAccounts)
+			b.cleanupAll(accounts, sessionAccounts)
 			return
 		case <-b.Shutdown:
-			b.cleanupAll(sessionAccounts)
+			b.cleanupAll(accounts, sessionAccounts)
 			return
 		case req := <-b.Requests:
 			username := "rdp_tmp_" + uuid.NewString()
-			password, err := generatePassword()
+			password, err := passwordGenerator()
 			if err == nil {
-				err = CreateTempUser(username, password)
+				err = accounts.CreateTempUser(username, password)
 			}
 			if err == nil {
-				err = AddToRDPGroup(username)
+				err = accounts.AddToRDPGroup(username)
 			}
 			if err != nil {
-				_ = DeleteTempUser(username)
+				_ = accounts.DeleteTempUser(username)
 				b.respond(req, CredResponse{SessionID: req.SessionID, Err: err})
 				continue
 			}
@@ -86,7 +112,7 @@ func (b *Broker) Run(ctx context.Context) {
 			if !ok {
 				continue
 			}
-			_ = DeleteTempUser(username)
+			_ = accounts.DeleteTempUser(username)
 			delete(sessionAccounts, event.SessionID)
 		}
 	}
@@ -102,9 +128,9 @@ func (b *Broker) respond(req CredRequest, response CredResponse) {
 	}
 }
 
-func (b *Broker) cleanupAll(accounts map[string]string) {
+func (b *Broker) cleanupAll(accountStore accountManager, accounts map[string]string) {
 	for sessionID, username := range accounts {
-		_ = DeleteTempUser(username)
+		_ = accountStore.DeleteTempUser(username)
 		delete(accounts, sessionID)
 	}
 }
