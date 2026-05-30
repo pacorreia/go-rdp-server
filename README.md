@@ -24,7 +24,7 @@ Current implementation is production-oriented and includes:
 
 - Windows host with Remote Desktop enabled
 - `guacd` installed and running with required privileges
-- Go 1.22+
+- Go 1.23+
 
 ## Configuration
 
