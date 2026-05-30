@@ -6,6 +6,8 @@ on:
     paths:
       - 'README.md'
       - 'docs/**'
+      - 'mkdocs.yml'
+      - 'requirements.txt'
       - '.github/workflows/docs-pages.yml'
   workflow_dispatch:
 
@@ -19,11 +21,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Publish docs to gh-pages
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: ./docs
-          force_orphan: true
-          enable_jekyll: true
+          python-version: '3.x'
+
+      - name: Install MkDocs dependencies
+        run: pip install -r requirements.txt
+
+      - name: Deploy docs to gh-pages
+        run: mkdocs gh-deploy --force

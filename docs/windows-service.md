@@ -1,7 +1,5 @@
 ---
-layout: default
 title: Windows Service Operations
-nav_order: 4
 ---
 
 # Windows service operations

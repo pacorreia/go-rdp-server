@@ -1,7 +1,5 @@
 ---
-layout: default
 title: Zensical Model
-nav_order: 6
 ---
 
 # Zensical documentation model
