@@ -6,7 +6,7 @@ on:
     paths:
       - 'README.md'
       - 'docs/**'
-      - 'mkdocs.yml'
+      - 'zensical.toml'
       - 'requirements.txt'
       - '.github/workflows/docs-pages.yml'
   workflow_dispatch:
@@ -26,8 +26,16 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install MkDocs dependencies
+      - name: Install Zensical
         run: pip install -r requirements.txt
 
-      - name: Deploy docs to gh-pages
-        run: mkdocs gh-deploy --force
+      - name: Build docs
+        run: zensical build
+
+      - name: Publish to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ./site
+          force_orphan: true
