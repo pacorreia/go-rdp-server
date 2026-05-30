@@ -11,6 +11,8 @@ import (
 	"github.com/pacorreia/go-rdp-server/internal/guacd"
 )
 
+const websocketWriteTimeout = 30 * time.Second
+
 type guacdClient interface {
 	SendChan() chan<- *guacd.Instruction
 	RecvChan() <-chan *guacd.Instruction
@@ -62,7 +64,7 @@ func (s *Session) Run(ctx context.Context) {
 	}
 	s.sendConnectHandshake(client.SendChan(), cred)
 
-	wsToGuacd := s.startWebsocketReader(ctx)
+	wsToGuacd := s.startWebSocketReader(ctx)
 	guacdToWS := s.startGuacdReader(ctx, client.RecvChan())
 	s.proxyLoop(ctx, client.SendChan(), wsToGuacd, guacdToWS)
 }
@@ -103,7 +105,7 @@ func (s *Session) sendConnectHandshake(out chan<- *guacd.Instruction, cred broke
 	}}
 }
 
-func (s *Session) startWebsocketReader(ctx context.Context) <-chan *guacd.Instruction {
+func (s *Session) startWebSocketReader(ctx context.Context) <-chan *guacd.Instruction {
 	out := make(chan *guacd.Instruction, 64)
 	go func() {
 		defer close(out)
@@ -167,7 +169,7 @@ func (s *Session) proxyLoop(ctx context.Context, guacdSend chan<- *guacd.Instruc
 			if !ok {
 				return
 			}
-			_ = s.Conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
+			_ = s.Conn.SetWriteDeadline(time.Now().Add(websocketWriteTimeout))
 			if err := s.Conn.WriteMessage(websocket.TextMessage, payload); err != nil {
 				s.Events <- broker.SessionEvent{SessionID: s.ID, Type: broker.SessionError, Err: fmt.Errorf("websocket write failed: %w", err)}
 				return

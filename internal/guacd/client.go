@@ -3,7 +3,6 @@ package guacd
 import (
 	"bufio"
 	"context"
-	"errors"
 	"io"
 	"net"
 )
@@ -46,9 +45,6 @@ func (c *Client) readLoop(ctx context.Context) {
 	for {
 		raw, err := reader.ReadString(';')
 		if err != nil {
-			if errors.Is(err, net.ErrClosed) || errors.Is(err, io.EOF) || ctx.Err() != nil {
-				return
-			}
 			return
 		}
 

@@ -3,8 +3,6 @@ package web
 import (
 	"bufio"
 	"context"
-	"errors"
-	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -28,8 +26,8 @@ func TestE2EWebsocketFlowWithGuacd(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	guacdAddr, stopGuacd := startFakeGuacd(t)
-	defer stopGuacd()
+	guacdAddr, stopFakeGuacd := startFakeGuacd(t)
+	defer stopFakeGuacd()
 
 	credRequests := make(chan broker.CredRequest, 8)
 	sessionEvents := make(chan broker.SessionEvent, 16)
@@ -97,8 +95,8 @@ func TestE2EWebsocketFlowWithGuacd(t *testing.T) {
 }
 
 func TestE2ENativeRDPClient(t *testing.T) {
-	if os.Getenv("RDP_E2E_NATIVE") != "1" {
-		t.Skip("set RDP_E2E_NATIVE=1 to run native RDP client check")
+	if os.Getenv("ENABLE_NATIVE_RDP_E2E_TEST") != "1" {
+		t.Skip("set ENABLE_NATIVE_RDP_E2E_TEST=1 to run native RDP client check")
 	}
 	rdpHost := os.Getenv("RDP_HOST")
 	rdpPort := os.Getenv("RDP_PORT")
@@ -200,10 +198,4 @@ func freeLocalAddress(t *testing.T) string {
 
 func requestsReadOnly(ch chan broker.CredRequest) <-chan broker.CredRequest {
 	return ch
-}
-
-func assertNoErr(err error) {
-	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		panic(fmt.Sprintf("unexpected server error: %v", err))
-	}
 }

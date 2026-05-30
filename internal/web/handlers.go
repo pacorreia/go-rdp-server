@@ -25,6 +25,8 @@ type Handlers struct {
 	RDPPort   string
 }
 
+const websocketCloseMessageTimeout = time.Second
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
@@ -57,7 +59,7 @@ func (h *Handlers) HandleRDPWebSocket(w http.ResponseWriter, r *http.Request) {
 	sessionID := uuid.NewString()
 	if err := h.Manager.Admit(sessionID); err != nil {
 		if errors.Is(err, session.ErrMaxSessionsReached) {
-			_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "max sessions reached"), time.Now().Add(time.Second))
+			_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "server at capacity; please retry shortly"), time.Now().Add(websocketCloseMessageTimeout))
 		}
 		_ = conn.Close()
 		return

@@ -105,7 +105,7 @@ func (b *Broker) Run(ctx context.Context) {
 				Password:  password,
 			})
 		case event := <-b.Events:
-			if event.Type != SessionClosed {
+			if event.Type != SessionClosed && event.Type != SessionError {
 				continue
 			}
 			username, ok := sessionAccounts[event.SessionID]
