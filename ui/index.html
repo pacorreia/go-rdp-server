@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Go RDP Server</title>
+    <script src="https://cdn.jsdelivr.net/npm/guacamole-common-js@1.5.5/dist/guacamole-common.min.js"></script>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background: #0f172a;
+      }
+      #display {
+        width: 100vw;
+        height: 100vh;
+      }
+      #toggleKeyboard {
+        position: fixed;
+        bottom: 16px;
+        right: 16px;
+        z-index: 2;
+        border: 0;
+        border-radius: 8px;
+        background: #1d4ed8;
+        color: #fff;
+        padding: 10px 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <button id="toggleKeyboard">Keyboard</button>
+    <div id="display"></div>
+
+    <script>
+      const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+      const tunnel = new Guacamole.WebSocketTunnel(`${protocol}://${window.location.host}/ws/rdp`);
+      const client = new Guacamole.Client(tunnel);
+      document.getElementById('display').appendChild(client.getDisplay().getElement());
+      client.connect();
+
+      const keyboard = new Guacamole.Keyboard(document);
+      let keyboardEnabled = false;
+
+      keyboard.onkeydown = function (keysym) {
+        if (!keyboardEnabled) return true;
+        client.sendKeyEvent(1, keysym);
+        return false;
+      };
+
+      keyboard.onkeyup = function (keysym) {
+        if (!keyboardEnabled) return true;
+        client.sendKeyEvent(0, keysym);
+        return false;
+      };
+
+      document.getElementById('toggleKeyboard').addEventListener('click', function () {
+        keyboardEnabled = !keyboardEnabled;
+        this.textContent = keyboardEnabled ? 'Keyboard ON' : 'Keyboard';
+      });
+
+      window.addEventListener('resize', function () {
+        client.sendSize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1);
+      });
+    </script>
+  </body>
+</html>
