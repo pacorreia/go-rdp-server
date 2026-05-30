@@ -51,7 +51,7 @@ flowchart LR
 
 1. Merge docs changes to `main`.
 2. Docs workflow deploys `/docs` content to `gh-pages`.
-3. In repository settings configure GitHub Pages source to `gh-pages` / root.
+3. In repository settings, configure GitHub Pages source to `gh-pages` / root.
 
 ```mermaid
 flowchart LR
