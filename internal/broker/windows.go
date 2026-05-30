@@ -65,6 +65,9 @@ func CreateTempUser(username, password string) error {
 		uintptr(unsafe.Pointer(&parmErr)),
 	)
 	if ret != 0 {
+		if parmErr != 0 {
+			return fmt.Errorf("NetUserAdd failed: %w (invalid parameter index: %d)", windows.Errno(ret), parmErr)
+		}
 		return fmt.Errorf("NetUserAdd failed: %w", windows.Errno(ret))
 	}
 

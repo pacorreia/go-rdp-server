@@ -26,10 +26,23 @@ func TestManagerAdmitAndRelease(t *testing.T) {
 	}
 
 	events <- broker.SessionEvent{SessionID: "session-1", Type: broker.SessionClosed}
-	time.Sleep(10 * time.Millisecond)
 
-	if err := manager.Admit("session-2"); err != nil {
-		t.Fatalf("expected admission after close to succeed: %v", err)
+	deadline := time.After(1 * time.Second)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		err := manager.Admit("session-2")
+		if err == nil {
+			break
+		}
+		if err != ErrMaxSessionsReached {
+			t.Fatalf("expected ErrMaxSessionsReached while waiting, got %v", err)
+		}
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for session close event processing")
+		case <-ticker.C:
+		}
 	}
 
 	close(shutdown)
