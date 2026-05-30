@@ -71,7 +71,13 @@ func (s *Session) Run(ctx context.Context) {
 
 func (s *Session) requestCredentials(ctx context.Context) (broker.CredResponse, bool) {
 	responseCh := make(chan broker.CredResponse, 1)
-	s.CredRequests <- broker.CredRequest{SessionID: s.ID, Reply: responseCh}
+	select {
+	case s.CredRequests <- broker.CredRequest{SessionID: s.ID, Reply: responseCh}:
+	case <-ctx.Done():
+		return broker.CredResponse{}, false
+	case <-s.Shutdown:
+		return broker.CredResponse{}, false
+	}
 
 	select {
 	case <-ctx.Done():
@@ -114,16 +120,18 @@ func (s *Session) startWebSocketReader(ctx context.Context) <-chan *guacd.Instru
 			if err != nil {
 				return
 			}
-			instruction, err := guacd.Decode(strings.TrimSpace(string(message)))
+			instructions, err := guacd.DecodeAll(strings.TrimSpace(string(message)))
 			if err != nil {
 				continue
 			}
-			select {
-			case <-ctx.Done():
-				return
-			case <-s.Shutdown:
-				return
-			case out <- instruction:
+			for _, instruction := range instructions {
+				select {
+				case <-ctx.Done():
+					return
+				case <-s.Shutdown:
+					return
+				case out <- instruction:
+				}
 			}
 		}
 	}()

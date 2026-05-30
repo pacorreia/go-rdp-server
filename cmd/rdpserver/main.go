@@ -46,20 +46,47 @@ func runServer(ctx context.Context) error {
 	credRequests := make(chan broker.CredRequest)
 	credResponses := make(chan broker.CredResponse)
 	sessionEvents := make(chan broker.SessionEvent, 128)
+	brokerEvents := make(chan broker.SessionEvent, 128)
+	managerEvents := make(chan broker.SessionEvent, 128)
 	shutdown := make(chan struct{})
+
+	// Fan-out: every session event is delivered to both the broker and the manager.
+	go func() {
+		for {
+			select {
+			case <-shutdown:
+				return
+			case event, ok := <-sessionEvents:
+				if !ok {
+					return
+				}
+				select {
+				case brokerEvents <- event:
+				case <-shutdown:
+					return
+				}
+				select {
+				case managerEvents <- event:
+				case <-shutdown:
+					return
+				}
+			}
+		}
+	}()
 
 	credentialBroker := &broker.Broker{
 		Requests:  credRequests,
 		Responses: credResponses,
-		Events:    sessionEvents,
+		Events:    brokerEvents,
 		Shutdown:  shutdown,
 	}
-	manager := session.NewManager(maxSessions, sessionEvents, shutdown)
+	manager := session.NewManager(maxSessions, managerEvents, shutdown)
 	handlers := &web.Handlers{
 		Manager:      manager,
 		CredRequests: credRequests,
 		SessionEvent: sessionEvents,
 		Shutdown:     shutdown,
+		Ctx:          ctx,
 		GuacdAddr:    fmt.Sprintf("%s:%s", guacdHost, guacdPort),
 		RDPHost:      rdpHost,
 		RDPPort:      rdpPort,

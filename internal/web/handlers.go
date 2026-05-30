@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -19,6 +20,7 @@ type Handlers struct {
 	CredRequests chan<- broker.CredRequest
 	SessionEvent chan<- broker.SessionEvent
 	Shutdown     <-chan struct{}
+	Ctx          context.Context
 
 	GuacdAddr string
 	RDPHost   string
@@ -36,7 +38,7 @@ var upgrader = websocket.Upgrader{
 func isAllowedOrigin(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
 	if origin == "" {
-		return true
+		return false
 	}
 	originURL, err := url.Parse(origin)
 	if err != nil {
@@ -58,13 +60,22 @@ func (h *Handlers) HandleRDPWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	sessionID := uuid.NewString()
 	if err := h.Manager.Admit(sessionID); err != nil {
-		if errors.Is(err, session.ErrMaxSessionsReached) {
-			_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "server at capacity; please retry shortly"), time.Now().Add(websocketCloseMessageTimeout))
+		closeCode := websocket.CloseTryAgainLater
+		closeMsg := "server at capacity; please retry shortly"
+		if !errors.Is(err, session.ErrMaxSessionsReached) {
+			log.Printf("session admission error: %v", err)
+			closeCode = websocket.CloseInternalServerErr
+			closeMsg = "internal server error"
 		}
+		_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(closeCode, closeMsg), time.Now().Add(websocketCloseMessageTimeout))
 		_ = conn.Close()
 		return
 	}
 
+	ctx := h.Ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	h.SessionEvent <- broker.SessionEvent{SessionID: sessionID, Type: broker.SessionOpened}
 	worker := &session.Session{
 		ID:           sessionID,
@@ -77,5 +88,5 @@ func (h *Handlers) HandleRDPWebSocket(w http.ResponseWriter, r *http.Request) {
 		Shutdown:     h.Shutdown,
 	}
 
-	go worker.Run(context.Background())
+	go worker.Run(ctx)
 }

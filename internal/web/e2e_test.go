@@ -48,6 +48,7 @@ func TestE2EWebsocketFlowWithGuacd(t *testing.T) {
 		CredRequests: credRequests,
 		SessionEvent: sessionEvents,
 		Shutdown:     shutdown,
+		Ctx:          ctx,
 		GuacdAddr:    guacdAddr,
 		RDPHost:      "127.0.0.1",
 		RDPPort:      "3389",
