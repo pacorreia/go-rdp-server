@@ -6,6 +6,8 @@ on:
     paths:
       - 'README.md'
       - 'docs/**'
+      - 'zensical.toml'
+      - 'requirements.txt'
       - '.github/workflows/docs-pages.yml'
   workflow_dispatch:
 
@@ -17,13 +19,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      - name: Publish docs to gh-pages
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Install Zensical
+        run: pip install -r requirements.txt
+
+      - name: Build docs
+        run: zensical build
+
+      - name: Publish to gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
-          publish_dir: ./docs
+          publish_dir: ./site
           force_orphan: true
-          enable_jekyll: true
