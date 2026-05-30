@@ -8,6 +8,8 @@ import (
 	"github.com/pacorreia/go-rdp-server/internal/broker"
 )
 
+const admissionRetryInterval = 10 * time.Millisecond
+
 func TestManagerAdmitAndRelease(t *testing.T) {
 	events := make(chan broker.SessionEvent, 8)
 	shutdown := make(chan struct{})
@@ -28,7 +30,7 @@ func TestManagerAdmitAndRelease(t *testing.T) {
 	events <- broker.SessionEvent{SessionID: "session-1", Type: broker.SessionClosed}
 
 	deadline := time.After(1 * time.Second)
-	ticker := time.NewTicker(10 * time.Millisecond)
+	ticker := time.NewTicker(admissionRetryInterval)
 	defer ticker.Stop()
 	for {
 		err := manager.Admit("session-2")
