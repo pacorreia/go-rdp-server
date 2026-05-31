@@ -32,7 +32,7 @@ title: Development and Release
 | --- | --- | --- |
 | `build.yml` | Pull request | `go test` + Windows-targeted build validation |
 | `release.yml` | Push tag `v*` | Multi-platform binary release assets |
-| `docs-pages.yml` | Push to `main` (docs/**) | Publish `/docs` to `gh-pages` |
+| `docs-pages.yml` | Push to `main` touching docs inputs, or manual dispatch | Publish `/docs` to `gh-pages` |
 
 ## Release flow
 
