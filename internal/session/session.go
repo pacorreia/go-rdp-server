@@ -16,12 +16,24 @@ import (
 const (
 	websocketWriteTimeout = 30 * time.Second
 	websocketCloseTimeout = time.Second
-	authReadTimeout       = 15 * time.Second
+
+	// authReadTimeout is how long the session waits for the browser to send the
+	// auth message before closing the connection. 5 seconds is ample for a form
+	// submission while keeping the slot-holding DoS window small: with the
+	// default max of 10 sessions, an attacker holding all slots could block
+	// legitimate users for at most this long per reconnect cycle.
+	authReadTimeout = 5 * time.Second
 
 	// maxUsernameLen is the maximum accepted username length in per-user login
 	// mode. Windows SAM account names are limited to 20 characters, but UPN and
 	// domain\user formats can be longer. 256 characters is a safe upper bound.
 	maxUsernameLen = 256
+
+	// rdpMaxCoord is the maximum coordinate value accepted for mouse events.
+	// The RDP protocol encodes X/Y as 16-bit unsigned integers (0–65535).
+	// Values outside this range are clamped to prevent unexpected truncation
+	// or integer-overflow behaviour in the underlying RDP library.
+	rdpMaxCoord = 65535
 )
 
 // RDPDialFunc is the signature used by Session to open an RDP connection.
@@ -255,17 +267,29 @@ func (s *Session) startInputReader(ctx context.Context, rdp display.RDPSession) 
 			case "keyup":
 				rdp.KeyUp(clampScancode(msg.Scancode))
 			case "mousemove":
-				rdp.MouseMove(msg.X, msg.Y)
+				rdp.MouseMove(clampCoord(msg.X), clampCoord(msg.Y))
 			case "mousedown":
-				rdp.MouseDown(clampButton(msg.Button), msg.X, msg.Y)
+				rdp.MouseDown(clampButton(msg.Button), clampCoord(msg.X), clampCoord(msg.Y))
 			case "mouseup":
-				rdp.MouseUp(clampButton(msg.Button), msg.X, msg.Y)
+				rdp.MouseUp(clampButton(msg.Button), clampCoord(msg.X), clampCoord(msg.Y))
 			case "mousewheel":
 				rdp.MouseWheel(clampWheelDelta(msg.Delta))
 			}
 		}
 	}()
 	return done
+}
+
+// clampCoord constrains a mouse coordinate to the 16-bit range [0, 65535]
+// accepted by the RDP protocol. Values outside this range are clamped.
+func clampCoord(v int) int {
+	if v < 0 {
+		return 0
+	}
+	if v > rdpMaxCoord {
+		return rdpMaxCoord
+	}
+	return v
 }
 
 // clampScancode ensures a PS/2 scancode sent by the browser is within the

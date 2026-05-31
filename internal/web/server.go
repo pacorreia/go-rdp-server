@@ -74,6 +74,10 @@ func serveIndex(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	content, err := fs.ReadFile(ui.Assets, "index.html")
 	if err != nil {
 		http.Error(w, "unable to load ui", http.StatusInternalServerError)

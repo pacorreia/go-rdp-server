@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +17,46 @@ import (
 	"github.com/pacorreia/go-rdp-server/internal/broker"
 	"github.com/pacorreia/go-rdp-server/internal/session"
 )
+
+// maxConnsPerIP is the maximum number of concurrent WebSocket connections
+// accepted from a single remote IP address.  This limits slot-holding DoS
+// attacks: even if an attacker holds connections open for the full
+// authReadTimeout, they can only occupy maxConnsPerIP slots rather than
+// draining the entire session pool.
+const maxConnsPerIP = 3
+
+// ipTracker tracks the number of concurrent WebSocket connections per remote
+// IP.  It is embedded by value in Handlers so the zero value is ready to use.
+type ipTracker struct {
+	mu    sync.Mutex
+	conns map[string]int
+}
+
+// acquire increments the connection count for ip.  It returns false if the
+// count would exceed maxConnsPerIP.
+func (t *ipTracker) acquire(ip string) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.conns == nil {
+		t.conns = make(map[string]int)
+	}
+	if t.conns[ip] >= maxConnsPerIP {
+		return false
+	}
+	t.conns[ip]++
+	return true
+}
+
+// release decrements the connection count for ip.
+func (t *ipTracker) release(ip string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.conns[ip] <= 1 {
+		delete(t.conns, ip)
+	} else {
+		t.conns[ip]--
+	}
+}
 
 type Handlers struct {
 	Manager      *session.Manager
@@ -38,6 +80,9 @@ type Handlers struct {
 
 	// RDPDial, when non-nil, is forwarded to each session worker as a test hook.
 	RDPDial session.RDPDialFunc
+
+	// tracker limits concurrent connections per remote IP.
+	tracker ipTracker
 }
 
 // clientConfig is the JSON payload returned by GET /api/config.
@@ -88,8 +133,21 @@ func (h *Handlers) HandleRDPWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn, err := upgrader.Upgrade(w, r, nil)
+	// Enforce per-IP connection limit before upgrading to WebSocket, so that
+	// we can still return a plain HTTP error response.
+	remoteIP, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
+		http.Error(w, "bad remote address", http.StatusBadRequest)
+		return
+	}
+	if !h.tracker.acquire(remoteIP) {
+		http.Error(w, "too many connections from your IP", http.StatusTooManyRequests)
+		return
+	}
+
+	conn, upgradeErr := upgrader.Upgrade(w, r, nil)
+	if upgradeErr != nil {
+		h.tracker.release(remoteIP)
 		return
 	}
 	// Cap incoming message size to prevent a malicious client from sending an
@@ -107,6 +165,7 @@ func (h *Handlers) HandleRDPWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(closeCode, closeMsg), time.Now().Add(websocketCloseMessageTimeout))
 		_ = conn.Close()
+		h.tracker.release(remoteIP)
 		return
 	}
 
@@ -128,5 +187,8 @@ func (h *Handlers) HandleRDPWebSocket(w http.ResponseWriter, r *http.Request) {
 		RDPDial:        h.RDPDial,
 	}
 
-	go worker.Run(ctx)
+	go func() {
+		defer h.tracker.release(remoteIP)
+		worker.Run(ctx)
+	}()
 }
