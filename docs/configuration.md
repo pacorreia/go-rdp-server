@@ -20,7 +20,7 @@ All runtime behaviour is controlled through environment variables. No configurat
 ## Recommended defaults for production
 
 !!! tip "Session capacity"
-    Keep `MAX_SESSIONS` aligned with the Windows RDP CAL count and available host memory. Excess requests are rejected at the WebSocket handshake before any credential is provisioned.
+    Keep `MAX_SESSIONS` aligned with the Windows RDP CAL count and available host memory. Excess requests are closed with a retry-later WebSocket response before any credential is provisioned.
 
 !!! warning "Network exposure"
     Use non-public network placement for `HTTP_PORT`. The embedded client performs no authentication — protect the endpoint with a reverse proxy or network policy.
