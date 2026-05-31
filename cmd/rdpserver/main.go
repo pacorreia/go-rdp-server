@@ -92,12 +92,17 @@ func runServer(ctx context.Context, cfg *config) error {
 	}
 	manager := session.NewManager(cfg.maxSessions, managerEvents, shutdown)
 	handlers := &web.Handlers{
-		Manager:      manager,
-		CredRequests: credRequests,
-		SessionEvent: sessionEvents,
-		Shutdown:     shutdown,
-		Ctx:          ctx,
-		RDPAddr:      fmt.Sprintf("%s:%s", cfg.rdpHost, cfg.rdpPort),
+		Manager:           manager,
+		CredRequests:      credRequests,
+		SessionEvent:      sessionEvents,
+		Shutdown:          shutdown,
+		Ctx:               ctx,
+		RDPAddr:           fmt.Sprintf("%s:%s", cfg.rdpHost, cfg.rdpPort),
+		StaticRDPUsername: cfg.rdpUser,
+		StaticRDPPassword: cfg.rdpPass,
+		PerUserLogin:      cfg.perUserLogin,
+		AllowPasswordless: cfg.allowPasswordless,
+		MaxConnsPerIP:     cfg.maxConnsPerIP,
 	}
 	server := web.NewServer(":"+cfg.httpPort, handlers)
 
@@ -110,6 +115,9 @@ func runServer(ctx context.Context, cfg *config) error {
 		}
 	}()
 
+	if cfg.perUserLogin {
+		slog.Info("per-user login mode enabled; broker not used for credential creation")
+	}
 	slog.Info("rdp server listening", "port", cfg.httpPort)
 
 	var runErr error

@@ -4,6 +4,8 @@ package broker
 
 import (
 	"fmt"
+	"log"
+	"sync"
 	"syscall"
 	"unsafe"
 
@@ -31,11 +33,16 @@ type localGroupMembersInfo3 struct {
 	DomainAndName *uint16
 }
 
+type userInfo1003 struct {
+	Password *uint16
+}
+
 var (
 	netapi32                    = syscall.NewLazyDLL("netapi32.dll")
 	advapi32                    = syscall.NewLazyDLL("advapi32.dll")
 	procNetUserAdd              = netapi32.NewProc("NetUserAdd")
 	procNetUserDel              = netapi32.NewProc("NetUserDel")
+	procNetUserSetInfo          = netapi32.NewProc("NetUserSetInfo")
 	procNetLocalGroupAddMembers = netapi32.NewProc("NetLocalGroupAddMembers")
 	procLogonUserW              = advapi32.NewProc("LogonUserW")
 )
@@ -110,6 +117,59 @@ func AddToRDPGroup(username string) error {
 	return nil
 }
 
+// SetTempPassword temporarily assigns a random password to an existing Windows
+// account. This is the workaround for passwordless accounts: RDP requires a
+// non-empty password, so we set one for the duration of the session.
+// The returned cleanup function resets the password to empty (restoring the
+// passwordless state); it is safe to call more than once.
+func SetTempPassword(username string) (password string, cleanup func(), err error) {
+	password, err = generatePassword()
+	if err != nil {
+		return "", func() {}, fmt.Errorf("generate temp password: %w", err)
+	}
+	if err = setUserPassword(username, password); err != nil {
+		return "", func() {}, fmt.Errorf("set temp password: %w", err)
+	}
+	var once sync.Once
+	cleanup = func() {
+		once.Do(func() {
+			if err := setUserPassword(username, ""); err != nil {
+				log.Printf("broker: failed to restore empty password for %q: %v", username, err)
+			}
+		})
+	}
+	return password, cleanup, nil
+}
+
+// setUserPassword calls NetUserSetInfo(level=1003) to update the password for
+// an existing local account. An empty password string clears the password.
+func setUserPassword(username, password string) error {
+	namePtr, err := windows.UTF16PtrFromString(username)
+	if err != nil {
+		return err
+	}
+	passPtr, err := windows.UTF16PtrFromString(password)
+	if err != nil {
+		return err
+	}
+	info := userInfo1003{Password: passPtr}
+	var parmErr uint32
+	ret, _, _ := procNetUserSetInfo.Call(
+		0,
+		uintptr(unsafe.Pointer(namePtr)),
+		1003,
+		uintptr(unsafe.Pointer(&info)),
+		uintptr(unsafe.Pointer(&parmErr)),
+	)
+	if ret != 0 {
+		return fmt.Errorf("NetUserSetInfo failed: %w", windows.Errno(ret))
+	}
+	return nil
+}
+
+// ImpersonateUser calls LogonUserW to obtain an interactive logon token for
+// the given local account. The caller MUST close the returned token with
+// token.Close() when it is no longer needed to prevent a handle leak.
 func ImpersonateUser(username, password string) (windows.Token, error) {
 	usernamePtr, err := windows.UTF16PtrFromString(username)
 	if err != nil {
