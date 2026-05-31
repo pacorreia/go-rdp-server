@@ -14,6 +14,10 @@ Run `rdpserver.exe -help` to see all available flags.
 | --- | --- | --- | --- |
 | `-rdp-host` | `RDP_HOST` | `127.0.0.1` | RDP target host |
 | `-rdp-port` | `RDP_PORT` | `3389` | RDP target port |
+| `-rdp-user` | `RDP_USER` | _(none)_ | Static RDP username; bypasses temporary account creation and per-user login |
+| `-rdp-pass` | `RDP_PASS` | _(none)_ | Static RDP password; used together with `-rdp-user` |
+| `-per-user-login` | `PER_USER_LOGIN` | `true` | Show a per-user login form; each browser session supplies its own credentials |
+| `-allow-passwordless` | `ALLOW_PASSWORDLESS` | `false` | Allow the passwordless-account workaround in per-user login mode (requires NetUserSetInfo privileges; see below) |
 | `-http-port` | `HTTP_PORT` | `8080` | HTTP/WebSocket listen port |
 | `-max-sessions` | `MAX_SESSIONS` | `10` | Maximum concurrent active sessions |
 | `-log-level` | — | `info` | Log verbosity: `debug`, `info`, `warn`, `error` |
@@ -39,7 +43,13 @@ Run `rdpserver.exe -help` to see all available flags.
     Keep `-max-sessions` aligned with the Windows RDP CAL count and available host memory. Excess requests are closed with a retry-later WebSocket response before any credential is provisioned.
 
 !!! warning "Network exposure"
-    Use non-public network placement for `-http-port`. The embedded client performs no authentication — protect the endpoint with a reverse proxy or network policy.
+    Use non-public network placement for `-http-port`. In the default per-user login mode the browser login form provides credential-based access control, but this should not be the only security boundary — protect the endpoint with a reverse proxy or network policy.
+
+!!! warning "Passwordless account workaround"
+    `-allow-passwordless` causes the server to temporarily mutate the password of any local Windows account that authenticates with an empty password. Enable this only when the service runs as a privileged account on a machine with tightly controlled network access. Without this flag, empty passwords are rejected.
+
+!!! note "Static credentials vs per-user login"
+    `-rdp-user` / `-rdp-pass` take precedence over `-per-user-login`: when a static username is set, all browser sessions share the same RDP credentials and no login form is shown.
 
 !!! note "RDP target"
     `-rdp-host` and `-rdp-port` point the built-in RDP client at the Windows RDP server. In a single-host setup the RDP target is the same machine (`127.0.0.1`).
@@ -50,6 +60,12 @@ Run `rdpserver.exe -help` to see all available flags.
 .\rdpserver.exe -rdp-host 192.168.1.10 -rdp-port 3389 -http-port 8080 -max-sessions 5 -log-level debug
 ```
 
+## Example: static credentials (shared RDP account)
+
+```powershell
+.\rdpserver.exe -rdp-user admin -rdp-pass "S3cret!" -per-user-login=false
+```
+
 ## Example: environment variables (Windows Service)
 
 ```powershell
@@ -57,4 +73,8 @@ Run `rdpserver.exe -help` to see all available flags.
 [System.Environment]::SetEnvironmentVariable("RDP_PORT",    "3389",      "Machine")
 [System.Environment]::SetEnvironmentVariable("HTTP_PORT",   "8080",      "Machine")
 [System.Environment]::SetEnvironmentVariable("MAX_SESSIONS","10",        "Machine")
+# Optional: enable per-user login (default is true)
+[System.Environment]::SetEnvironmentVariable("PER_USER_LOGIN","true",    "Machine")
+# Optional: enable passwordless-account workaround (disabled by default)
+[System.Environment]::SetEnvironmentVariable("ALLOW_PASSWORDLESS","true","Machine")
 ```

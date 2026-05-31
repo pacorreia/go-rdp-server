@@ -86,8 +86,16 @@ type Session struct {
 	// the first WebSocket message as an auth message and uses those credentials
 	// directly to dial RDP, bypassing the broker entirely. Passwordless Windows
 	// accounts are supported by temporarily setting a random password via
-	// broker.SetTempPassword.
+	// broker.SetTempPassword, but only when AllowPasswordless is also true.
 	PerUserLogin bool
+
+	// AllowPasswordless, when true, enables the passwordless-account workaround
+	// in per-user login mode: if the browser sends an empty password the server
+	// calls broker.SetTempPassword to temporarily assign a random password for
+	// the duration of the session. This requires elevated privileges
+	// (NetUserSetInfo) and must be explicitly opted into by the operator via
+	// --allow-passwordless. When false, an empty password is rejected.
+	AllowPasswordless bool
 
 	CredRequests chan<- broker.CredRequest
 	Events       chan<- broker.SessionEvent
@@ -122,7 +130,14 @@ func (s *Session) Run(ctx context.Context) {
 		// Passwordless Windows accounts cannot authenticate over RDP with an
 		// empty password. Temporarily assign a random password for the duration
 		// of the session, then restore the empty password on exit.
+		// This behaviour requires NetUserSetInfo privileges and must be
+		// explicitly enabled by the operator via --allow-passwordless.
 		if password == "" {
+			if !s.AllowPasswordless {
+				log.Printf("session %s: empty password rejected for %q (--allow-passwordless not set)", s.ID, username)
+				s.writeCloseMsg(websocket.CloseUnsupportedData, "empty password not allowed")
+				return
+			}
 			tempPass, cleanup, err := broker.SetTempPassword(username)
 			if err != nil {
 				log.Printf("session %s: passwordless workaround failed for %q: %v", s.ID, username, err)

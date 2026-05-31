@@ -101,6 +101,7 @@ func runServer(ctx context.Context, cfg *config) error {
 		StaticRDPUsername: cfg.rdpUser,
 		StaticRDPPassword: cfg.rdpPass,
 		PerUserLogin:      cfg.perUserLogin,
+		AllowPasswordless: cfg.allowPasswordless,
 	}
 	server := web.NewServer(":"+cfg.httpPort, handlers)
 

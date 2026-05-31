@@ -78,6 +78,12 @@ type Handlers struct {
 	// containing the user's credentials. The broker is not used.
 	PerUserLogin bool
 
+	// AllowPasswordless, when true, enables the passwordless-account workaround:
+	// if the browser sends an empty password the server calls
+	// broker.SetTempPassword to temporarily assign a random password for the
+	// duration of the session. Must be explicitly opted into by the operator.
+	AllowPasswordless bool
+
 	// RDPDial, when non-nil, is forwarded to each session worker as a test hook.
 	RDPDial session.RDPDialFunc
 
@@ -175,16 +181,17 @@ func (h *Handlers) HandleRDPWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	h.SessionEvent <- broker.SessionEvent{SessionID: sessionID, Type: broker.SessionOpened}
 	worker := &session.Session{
-		ID:             sessionID,
-		Conn:           conn,
-		RDPAddr:        h.RDPAddr,
-		StaticUsername: h.StaticRDPUsername,
-		StaticPassword: h.StaticRDPPassword,
-		PerUserLogin:   h.PerUserLogin,
-		CredRequests:   h.CredRequests,
-		Events:         h.SessionEvent,
-		Shutdown:       h.Shutdown,
-		RDPDial:        h.RDPDial,
+		ID:                sessionID,
+		Conn:              conn,
+		RDPAddr:           h.RDPAddr,
+		StaticUsername:    h.StaticRDPUsername,
+		StaticPassword:    h.StaticRDPPassword,
+		PerUserLogin:      h.PerUserLogin,
+		AllowPasswordless: h.AllowPasswordless,
+		CredRequests:      h.CredRequests,
+		Events:            h.SessionEvent,
+		Shutdown:          h.Shutdown,
+		RDPDial:           h.RDPDial,
 	}
 
 	go func() {
