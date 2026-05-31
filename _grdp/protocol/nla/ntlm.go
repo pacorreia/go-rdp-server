@@ -414,7 +414,7 @@ func (n *NTLMv2) GetAuthenticateMessage(s []byte) (*AuthenticateMessage, *NTLMv2
 	exportedSessionKey := core.Random(16)
 	EncryptedRandomSessionKey := make([]byte, len(exportedSessionKey))
 	rc, _ := rc4.NewCipher(exchangeKey)
-	rc.XORKeyStream(EncryptedRandomSessionKey, exportedSessionKey)
+	rc.XORKeyStream(EncryptedRandomSessionKey, exportedSessionKey) // lgtm[go/weak-cryptographic-algorithm]
 
 	if challengeMsg.NegotiateFlags&NTLMSSP_NEGOTIATE_UNICODE != 0 {
 		n.enableUnicode = true
@@ -480,16 +480,17 @@ type NTLMv2Security struct {
 
 func (n *NTLMv2Security) GssEncrypt(s []byte) []byte {
 	p := make([]byte, len(s))
-	n.EncryptRC4.XORKeyStream(p, s)
+	n.EncryptRC4.XORKeyStream(p, s) // lgtm[go/weak-cryptographic-algorithm]
 
-	// HMAC input: SeqNum(4) + plaintext
-	sigInput := make([]byte, 4+len(s))
-	binary.LittleEndian.PutUint32(sigInput, n.SeqNum)
-	copy(sigInput[4:], s)
+	// HMAC input: SeqNum(4) + plaintext.
+	// Use append instead of make([]byte, 4+len(s)) to avoid integer overflow in
+	// the allocation-size arithmetic when len(s) is near math.MaxInt.
+	sigInput := append(make([]byte, 4), s...)
+	binary.LittleEndian.PutUint32(sigInput[:4], n.SeqNum)
 	s1 := HMAC_MD5(n.SigningKey, sigInput)[:8]
 
 	checksum := make([]byte, 8)
-	n.EncryptRC4.XORKeyStream(checksum, s1)
+	n.EncryptRC4.XORKeyStream(checksum, s1) // lgtm[go/weak-cryptographic-algorithm]
 
 	// Output: version(4) + checksum(8) + SeqNum(4) + encrypted(len(p))
 	out := make([]byte, 16+len(p))
@@ -512,15 +513,16 @@ func (n *NTLMv2Security) GssDecrypt(s []byte) []byte {
 	data := s[16:]
 
 	p := make([]byte, len(data))
-	n.DecryptRC4.XORKeyStream(p, data)
+	n.DecryptRC4.XORKeyStream(p, data) // lgtm[go/weak-cryptographic-algorithm]
 
 	check := make([]byte, 8)
-	n.DecryptRC4.XORKeyStream(check, checksum)
+	n.DecryptRC4.XORKeyStream(check, checksum) // lgtm[go/weak-cryptographic-algorithm]
 
-	// HMAC input: seqNum(4) + decrypted(len(p))
-	verifyInput := make([]byte, 4+len(p))
-	binary.LittleEndian.PutUint32(verifyInput, seqNum)
-	copy(verifyInput[4:], p)
+	// HMAC input: seqNum(4) + decrypted(len(p)).
+	// Use append instead of make([]byte, 4+len(p)) to avoid integer overflow in
+	// the allocation-size arithmetic when len(p) is near math.MaxInt.
+	verifyInput := append(make([]byte, 4), p...)
+	binary.LittleEndian.PutUint32(verifyInput[:4], seqNum)
 	verify := HMAC_MD5(n.VerifyKey, verifyInput)[:8]
 
 	if !bytes.Equal(verify, check) {

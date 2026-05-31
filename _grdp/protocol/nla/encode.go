@@ -41,6 +41,6 @@ func LMOWFv2(password, user, domain string) []byte {
 func RC4K(key, src []byte) []byte {
 	result := make([]byte, len(src))
 	rc4obj, _ := rc4.NewCipher(key)
-	rc4obj.XORKeyStream(result, src)
+	rc4obj.XORKeyStream(result, src) // lgtm[go/weak-cryptographic-algorithm]
 	return result
 }

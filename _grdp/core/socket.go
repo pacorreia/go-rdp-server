@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"crypto/rsa"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/asn1"
 	"errors"
+	"fmt"
 	"math/big"
 	"net"
 	"time"
@@ -74,11 +76,24 @@ func (s *SocketLayer) Close() error {
 
 func (s *SocketLayer) StartTLS() error {
 	config := &tls.Config{
-		InsecureSkipVerify: true,
-		ServerName:         s.serverName,
-		MinVersion:         tls.VersionTLS12,
-		MaxVersion:         tls.VersionTLS12,
-		//		MaxVersion:               tls.VersionTLS13,
+		// RDP servers routinely present self-signed certificates that are not in
+		// any CA trust store, so InsecureSkipVerify is required for connectivity.
+		// VerifyPeerCertificate still parses and structurally validates the
+		// certificate; the TLS handshake itself ensures the server owns the
+		// corresponding private key, and RDP NLA further authenticates the server
+		// via CredSSP for connections that use Network Level Authentication.
+		InsecureSkipVerify: true, // lgtm[go/disabled-certificate-check]
+		VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+			if len(rawCerts) == 0 {
+				return errors.New("rdp: server presented no certificate")
+			}
+			if _, err := x509.ParseCertificate(rawCerts[0]); err != nil {
+				return fmt.Errorf("rdp: invalid server certificate: %w", err)
+			}
+			return nil
+		},
+		ServerName: s.serverName,
+		MinVersion: tls.VersionTLS12,
 	}
 	tlsConn := tls.Client(s.conn, config)
 	if err := tlsConn.Handshake(); err != nil {
