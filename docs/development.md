@@ -4,18 +4,35 @@ title: Development and Release
 
 # Development and release
 
-## Validate locally
+## Build
 
-```bash
-go test ./...
-GOOS=windows GOARCH=amd64 go build ./...
-```
+=== "Linux / macOS"
+
+    ```bash
+    # Run unit tests
+    go test ./...
+
+    # Cross-compile for Windows (required — service code is Windows-only)
+    GOOS=windows GOARCH=amd64 go build ./...
+    ```
+
+=== "Windows"
+
+    ```powershell
+    # Run unit tests
+    go test ./...
+
+    # Build native binary
+    go build -o rdpserver.exe ./cmd/rdpserver
+    ```
 
 ## CI workflows
 
-- `build.yml`: pull request checks (`go test`, Windows-targeted build)
-- `release.yml`: tagged (`v*`) multi-platform binary release assets
-- `docs-pages.yml`: publishes `/docs` to `gh-pages` branch
+| Workflow | Trigger | Purpose |
+| --- | --- | --- |
+| `build.yml` | Pull request | `go test` + Windows-targeted build validation |
+| `release.yml` | Push tag `v*` | Multi-platform binary release assets |
+| `docs-pages.yml` | Push to `main` touching docs inputs, or manual dispatch | Publish `/docs` to `gh-pages` |
 
 ## Release flow
 
@@ -39,6 +56,14 @@ flowchart LR
 ```mermaid
 flowchart LR
     Commit["Push to main\n(docs/**)"] --> DocsCI["docs-pages.yml"]
-    DocsCI --> GHPages["gh-pages branch\n(Jekyll rendered)"]
+    DocsCI --> GHPages["gh-pages branch"]
     GHPages --> Site["GitHub Pages site"]
 ```
+
+!!! tip "Local docs build"
+    Install the doc dependencies and build the site locally:
+
+    ```bash
+    pip install -r requirements.txt
+    zensical build
+    ```
