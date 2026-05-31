@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.2.0](https://github.com/pacorreia/go-rdp-server/compare/v1.1.0...v1.2.0) (2026-05-31)
+
+
+### Features
+
+* make per-user-login the default mode ([22e6f7b](https://github.com/pacorreia/go-rdp-server/commit/22e6f7b9bfca84982f112ecd97087cad9272a663))
+* per-user login form with passwordless Windows account support ([611c971](https://github.com/pacorreia/go-rdp-server/commit/611c971b70f7bd2cca5aac8cb899a21992e4acaf))
+
+
+### Bug Fixes
+
+* address code review comments (Enter key dedup, close code comment, log cleanup error) ([2225a49](https://github.com/pacorreia/go-rdp-server/commit/2225a49c172764db9ca1529b3ac1dec45902586f))
+* gate empty-password passwordless workaround behind --allow-passwordless flag and document new flags ([2c81494](https://github.com/pacorreia/go-rdp-server/commit/2c81494a1168108288d6e79ee80d3b4cc32c4f93))
+* harden per-user login, add --allow-passwordless flag, and document new configuration options ([f2eddb8](https://github.com/pacorreia/go-rdp-server/commit/f2eddb84b247edf3d226718ca77b996d05576f5c))
+* ipTracker.release use == 1 to avoid masking double-release bugs ([0c65fb2](https://github.com/pacorreia/go-rdp-server/commit/0c65fb2e25ce80170ae88dbf5706fe47f946d5b4))
+* proper WebSocket close frames and static RDP credential support ([07be282](https://github.com/pacorreia/go-rdp-server/commit/07be282b69e96f38284f1de302b1f83351314aa8))
+
 ## [1.1.0](https://github.com/pacorreia/go-rdp-server/compare/v1.0.1...v1.1.0) (2026-05-31)
 
 
