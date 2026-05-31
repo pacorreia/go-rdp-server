@@ -13,3 +13,5 @@ require (
 	github.com/lunixbochs/struc v0.0.0-20200707160740-784aaebc1d40 // indirect
 	golang.org/x/crypto v0.45.0 // indirect
 )
+
+replace github.com/nakagami/grdp v0.8.6 => ./_grdp // patched: PUNPCKLWD/PUNPCKHWD/PSRLD/PSLLD renamed to Go Plan 9 mnemonics
