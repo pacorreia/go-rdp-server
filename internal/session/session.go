@@ -150,7 +150,9 @@ func (s *Session) readAuth(ctx context.Context) (username, password string, ok b
 		case <-ctx.Done():
 		case <-s.Shutdown:
 		default:
-			s.writeCloseMsg(4000, "auth timeout")
+			// 4008 is in the application-defined range (4000–4999) and signals
+			// that the client failed to send an auth message within the timeout.
+			s.writeCloseMsg(4008, "auth timeout")
 		}
 		return "", "", false
 	}

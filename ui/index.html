@@ -280,11 +280,10 @@
             showOverlay(true);
 
             document.getElementById('loginBtn').addEventListener('click', submitLogin);
-            document.getElementById('loginPass').addEventListener('keydown', (e) => {
-              if (e.key === 'Enter') submitLogin();
-            });
-            document.getElementById('loginUser').addEventListener('keydown', (e) => {
-              if (e.key === 'Enter') submitLogin();
+            ['loginPass', 'loginUser'].forEach(id => {
+              document.getElementById(id).addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') submitLogin();
+              });
             });
           } else {
             // Non-per-user mode: connect immediately (existing behaviour).

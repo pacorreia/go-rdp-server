@@ -4,6 +4,7 @@ package broker
 
 import (
 	"fmt"
+	"log"
 	"sync"
 	"syscall"
 	"unsafe"
@@ -131,7 +132,11 @@ func SetTempPassword(username string) (password string, cleanup func(), err erro
 	}
 	var once sync.Once
 	cleanup = func() {
-		once.Do(func() { _ = setUserPassword(username, "") })
+		once.Do(func() {
+			if err := setUserPassword(username, ""); err != nil {
+				log.Printf("broker: failed to restore empty password for %q: %v", username, err)
+			}
+		})
 	}
 	return password, cleanup, nil
 }
