@@ -82,6 +82,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.tag_name }}
 
       - name: Setup Go
         uses: actions/setup-go@v6
