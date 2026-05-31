@@ -38,10 +38,11 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ inputs.tag_name }}
         run: |
-          git tag ${{ inputs.tag_name }}
-          git push origin ${{ inputs.tag_name }}
-          gh release create ${{ inputs.tag_name }} --generate-notes
+          git tag -- "$TAG_NAME"
+          git push origin "refs/tags/$TAG_NAME"
+          gh release create "$TAG_NAME" --generate-notes
 
       - name: Determine release outputs
         id: determine
