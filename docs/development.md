@@ -60,8 +60,8 @@ flowchart LR
     GHPages --> Site["GitHub Pages site"]
 ```
 
-!!! tip "Local docs preview"
-    Install the doc dependencies and run a local preview server:
+!!! tip "Local docs build"
+    Install the doc dependencies and build the site locally:
 
     ```bash
     pip install -r requirements.txt
