@@ -106,8 +106,8 @@
         </label>
         <label>
           Password
-          <input type="password" id="loginPass" autocomplete="current-password" />
-          <span class="hint">Leave blank for a passwordless account</span>
+          <input type="password" id="loginPass" autocomplete="current-password" required />
+          <span class="hint">Password is required</span>
         </label>
         <div id="loginError"></div>
         <button id="loginBtn">Connect</button>
@@ -305,6 +305,10 @@
           return;
         }
         const password = document.getElementById('loginPass').value;
+        if (!password) {
+          loginError.textContent = 'Password is required.';
+          return;
+        }
         loginError.textContent = '';
         openWebSocket({ type: 'auth', username, password });
       }

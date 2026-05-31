@@ -47,7 +47,7 @@ Run `rdpserver.exe -help` to see all available flags.
     Use non-public network placement for `-http-port`. In the default per-user login mode the browser login form provides credential-based access control, but this should not be the only security boundary — protect the endpoint with a reverse proxy or network policy.
 
 !!! warning "Passwordless account workaround"
-    Empty passwords are rejected in per-user login mode. The `-allow-passwordless` flag is retained only for compatibility with previous releases and has no effect.
+    Empty passwords are rejected in per-user login mode. The `-allow-passwordless` flag is retained only for compatibility with previous releases and is currently ignored by the server.
 
 !!! warning "Reverse proxy deployments"
     The per-IP WebSocket limiter keys on the request source IP. In reverse-proxy deployments, configure trusted client-IP forwarding at the proxy layer and set `-max-conns-per-ip=0` if you need to disable the built-in per-IP limiter.
