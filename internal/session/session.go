@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -12,7 +13,28 @@ import (
 	"github.com/pacorreia/go-rdp-server/internal/display"
 )
 
-const websocketWriteTimeout = 30 * time.Second
+const (
+	websocketWriteTimeout = 30 * time.Second
+	websocketCloseTimeout = time.Second
+
+	// authReadTimeout is how long the session waits for the browser to send the
+	// auth message before closing the connection. 5 seconds is ample for a form
+	// submission while keeping the slot-holding DoS window small: with the
+	// default max of 10 sessions, an attacker holding all slots could block
+	// legitimate users for at most this long per reconnect cycle.
+	authReadTimeout = 5 * time.Second
+
+	// maxUsernameLen is the maximum accepted username length in per-user login
+	// mode. Windows SAM account names are limited to 20 characters, but UPN and
+	// domain\user formats can be longer. 256 characters is a safe upper bound.
+	maxUsernameLen = 256
+
+	// rdpMaxCoord is the maximum coordinate value accepted for mouse events.
+	// The RDP protocol encodes X/Y as 16-bit unsigned integers (0–65535).
+	// Values outside this range are clamped to prevent unexpected truncation
+	// or integer-overflow behaviour in the underlying RDP library.
+	rdpMaxCoord = 65535
+)
 
 // RDPDialFunc is the signature used by Session to open an RDP connection.
 // addr is "host:port"; domain may be empty for local accounts.
@@ -39,6 +61,13 @@ type clientMsg struct {
 	Delta    int    `json:"delta,omitempty"` // scroll notches (positive=up, negative=down)
 }
 
+// authMsg is the first message sent by the browser in per-user login mode.
+type authMsg struct {
+	Type     string `json:"type"` // always "auth"
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
 // Session is a worker goroutine handling one WebSocket ↔ RDP tunnel.
 type Session struct {
 	ID string
@@ -47,6 +76,20 @@ type Session struct {
 
 	// RDPAddr is the "host:port" of the Windows machine running RDP.
 	RDPAddr string
+
+	// StaticUsername and StaticPassword, when non-empty, are used directly as
+	// RDP credentials without contacting the broker.
+	StaticUsername string
+	StaticPassword string
+
+	// PerUserLogin, when true, activates per-user login mode: the session reads
+	// the first WebSocket message as an auth message and uses those credentials
+	// directly to dial RDP, bypassing the broker entirely.
+	PerUserLogin bool
+
+	// AllowPasswordless is retained for backwards compatibility with previous
+	// config surfaces. Empty passwords are rejected in per-user login mode.
+	AllowPasswordless bool
 
 	CredRequests chan<- broker.CredRequest
 	Events       chan<- broker.SessionEvent
@@ -65,18 +108,45 @@ func (s *Session) Run(ctx context.Context) {
 		_ = s.Conn.Close()
 	}()
 
-	cred, ok := s.requestCredentials(ctx)
-	if !ok {
-		return
-	}
-	if cred.Err != nil {
-		s.Events <- broker.SessionEvent{SessionID: s.ID, Type: broker.SessionError, Err: cred.Err}
-		return
+	var cred broker.CredResponse
+	if s.StaticUsername != "" {
+		var ok bool
+		cred, ok = s.requestCredentials(ctx)
+		if !ok {
+			s.writeCloseMsg(websocket.CloseGoingAway, "server shutting down")
+			return
+		}
+	} else if s.PerUserLogin {
+		username, password, ok := s.readAuth(ctx)
+		if !ok {
+			return
+		}
+		if password == "" {
+			log.Printf("session %s: empty password rejected for %q", s.ID, username)
+			s.writeCloseMsg(websocket.CloseUnsupportedData, "password is required")
+			return
+		}
+		cred = broker.CredResponse{SessionID: s.ID, Username: username, Password: password}
+	} else {
+		var ok bool
+		cred, ok = s.requestCredentials(ctx)
+		if !ok {
+			s.writeCloseMsg(websocket.CloseGoingAway, "server shutting down")
+			return
+		}
+		if cred.Err != nil {
+			log.Printf("session %s: credential error: %v", s.ID, cred.Err)
+			s.Events <- broker.SessionEvent{SessionID: s.ID, Type: broker.SessionError, Err: cred.Err}
+			s.writeCloseMsg(websocket.CloseInternalServerErr, "credential error")
+			return
+		}
 	}
 
 	rdp, err := s.dialRDP(ctx, cred)
 	if err != nil {
+		log.Printf("session %s: RDP connect error: %v", s.ID, err)
 		s.Events <- broker.SessionEvent{SessionID: s.ID, Type: broker.SessionError, Err: fmt.Errorf("rdp connect: %w", err)}
+		s.writeCloseMsg(websocket.CloseInternalServerErr, "RDP connection failed")
 		return
 	}
 	defer rdp.Close()
@@ -85,8 +155,56 @@ func (s *Session) Run(ctx context.Context) {
 	s.tileLoop(ctx, rdp, inputDone)
 }
 
-// requestCredentials asks the broker for temporary Windows credentials.
+// readAuth reads the first WebSocket message and expects it to be an auth
+// message. It returns the username and password extracted from the message.
+// On failure it sends an appropriate close frame and returns ok=false.
+func (s *Session) readAuth(ctx context.Context) (username, password string, ok bool) {
+	_ = s.Conn.SetReadDeadline(time.Now().Add(authReadTimeout))
+	_, raw, err := s.Conn.ReadMessage()
+	_ = s.Conn.SetReadDeadline(time.Time{}) // clear deadline for subsequent reads
+	if err != nil {
+		select {
+		case <-ctx.Done():
+		case <-s.Shutdown:
+		default:
+			// 4008 is in the application-defined range (4000–4999) and signals
+			// that the client failed to send an auth message within the timeout.
+			s.writeCloseMsg(4008, "auth timeout")
+		}
+		return "", "", false
+	}
+	var msg authMsg
+	if err := json.Unmarshal(raw, &msg); err != nil || msg.Type != "auth" {
+		s.writeCloseMsg(websocket.CloseUnsupportedData, "expected auth message")
+		return "", "", false
+	}
+	if msg.Username == "" {
+		s.writeCloseMsg(websocket.CloseUnsupportedData, "username is required")
+		return "", "", false
+	}
+	if len(msg.Username) > maxUsernameLen {
+		s.writeCloseMsg(websocket.ClosePolicyViolation, "username too long")
+		return "", "", false
+	}
+	return msg.Username, msg.Password, true
+}
+
+// writeCloseMsg sends a WebSocket close frame to the client.
+func (s *Session) writeCloseMsg(code int, reason string) {
+	msg := websocket.FormatCloseMessage(code, reason)
+	_ = s.Conn.WriteControl(websocket.CloseMessage, msg, time.Now().Add(websocketCloseTimeout))
+}
+
+// requestCredentials asks the broker for temporary Windows credentials, or
+// returns the statically configured credentials if set.
 func (s *Session) requestCredentials(ctx context.Context) (broker.CredResponse, bool) {
+	if s.StaticUsername != "" {
+		return broker.CredResponse{
+			SessionID: s.ID,
+			Username:  s.StaticUsername,
+			Password:  s.StaticPassword,
+		}, true
+	}
 	responseCh := make(chan broker.CredResponse, 1)
 	select {
 	case s.CredRequests <- broker.CredRequest{SessionID: s.ID, Reply: responseCh}:
@@ -145,21 +263,69 @@ func (s *Session) startInputReader(ctx context.Context, rdp display.RDPSession) 
 			}
 			switch msg.Type {
 			case "keydown":
-				rdp.KeyDown(msg.Scancode)
+				rdp.KeyDown(clampScancode(msg.Scancode))
 			case "keyup":
-				rdp.KeyUp(msg.Scancode)
+				rdp.KeyUp(clampScancode(msg.Scancode))
 			case "mousemove":
-				rdp.MouseMove(msg.X, msg.Y)
+				rdp.MouseMove(clampCoord(msg.X), clampCoord(msg.Y))
 			case "mousedown":
-				rdp.MouseDown(msg.Button, msg.X, msg.Y)
+				rdp.MouseDown(clampButton(msg.Button), clampCoord(msg.X), clampCoord(msg.Y))
 			case "mouseup":
-				rdp.MouseUp(msg.Button, msg.X, msg.Y)
+				rdp.MouseUp(clampButton(msg.Button), clampCoord(msg.X), clampCoord(msg.Y))
 			case "mousewheel":
-				rdp.MouseWheel(msg.Delta)
+				rdp.MouseWheel(clampWheelDelta(msg.Delta))
 			}
 		}
 	}()
 	return done
+}
+
+// clampCoord constrains a mouse coordinate to the 16-bit range [0, 65535]
+// accepted by the RDP protocol. Values outside this range are clamped.
+func clampCoord(v int) int {
+	if v < 0 {
+		return 0
+	}
+	if v > rdpMaxCoord {
+		return rdpMaxCoord
+	}
+	return v
+}
+
+// clampScancode ensures a PS/2 scancode sent by the browser is within the
+// valid 16-bit range [0x0000, 0xFFFF]. Values outside this range are zeroed
+// to prevent unexpected behaviour in the underlying RDP library.
+func clampScancode(sc int) int {
+	if sc < 0 || sc > 0xFFFF {
+		return 0
+	}
+	return sc
+}
+
+// clampButton constrains a mouse-button index to the three values recognised
+// by the RDP protocol: 0 (left), 1 (middle), 2 (right). Any other value is
+// mapped to 0.
+func clampButton(b int) int {
+	if b < 0 || b > 2 {
+		return 0
+	}
+	return b
+}
+
+// clampWheelDelta constrains a scroll-wheel delta to [-1, 1] (one notch per
+// event). The browser UI already sends only -1 or 1, but this clamp is
+// defense-in-depth: a malicious WebSocket client could bypass the UI and send
+// an arbitrarily large delta value, which we don't want to forward verbatim to
+// the RDP library.
+func clampWheelDelta(d int) int {
+	switch {
+	case d > 0:
+		return 1
+	case d < 0:
+		return -1
+	default:
+		return 0
+	}
 }
 
 // tileLoop reads tile updates from the RDP session and writes them as JSON to

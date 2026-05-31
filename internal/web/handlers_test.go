@@ -32,3 +32,32 @@ func TestIsAllowedOrigin(t *testing.T) {
 		})
 	}
 }
+
+func TestIPTrackerAcquireRespectsLimit(t *testing.T) {
+	var tracker ipTracker
+	ip := "127.0.0.1"
+	if !tracker.acquire(ip, 2) {
+		t.Fatalf("first acquire should succeed")
+	}
+	if !tracker.acquire(ip, 2) {
+		t.Fatalf("second acquire should succeed")
+	}
+	if tracker.acquire(ip, 2) {
+		t.Fatalf("third acquire should fail when limit is reached")
+	}
+	tracker.release(ip)
+	if !tracker.acquire(ip, 2) {
+		t.Fatalf("acquire should succeed after release")
+	}
+}
+
+func TestIPTrackerAcquireDisabledLimit(t *testing.T) {
+	var tracker ipTracker
+	ip := "127.0.0.1"
+	for i := 0; i < 100; i++ {
+		if !tracker.acquire(ip, 0) {
+			t.Fatalf("acquire should succeed when limit is disabled")
+		}
+	}
+	tracker.release(ip)
+}
