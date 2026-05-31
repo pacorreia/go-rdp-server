@@ -51,7 +51,7 @@ func (t *ipTracker) acquire(ip string) bool {
 func (t *ipTracker) release(ip string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.conns[ip] <= 1 {
+	if t.conns[ip] == 1 {
 		delete(t.conns, ip)
 	} else {
 		t.conns[ip]--
