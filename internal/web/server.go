@@ -15,6 +15,7 @@ type Server struct {
 func NewServer(addr string, handlers *Handlers) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", serveIndex)
+	mux.HandleFunc("/api/config", handlers.HandleConfig)
 	mux.HandleFunc("/ws/rdp", handlers.HandleRDPWebSocket)
 
 	return &Server{

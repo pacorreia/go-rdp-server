@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -30,8 +31,18 @@ type Handlers struct {
 	StaticRDPUsername string
 	StaticRDPPassword string
 
+	// PerUserLogin, when true, activates per-user login mode: the browser shows
+	// a login form and the first WebSocket message must be an auth message
+	// containing the user's credentials. The broker is not used.
+	PerUserLogin bool
+
 	// RDPDial, when non-nil, is forwarded to each session worker as a test hook.
 	RDPDial session.RDPDialFunc
+}
+
+// clientConfig is the JSON payload returned by GET /api/config.
+type clientConfig struct {
+	PerUserLogin bool `json:"perUserLogin"`
 }
 
 const websocketCloseMessageTimeout = time.Second
@@ -52,6 +63,13 @@ func isAllowedOrigin(r *http.Request) bool {
 		return false
 	}
 	return strings.EqualFold(originURL.Host, r.Host)
+}
+
+// HandleConfig returns a small JSON object that the browser reads on startup
+// to decide how to behave (e.g. whether to show the per-user login form).
+func (h *Handlers) HandleConfig(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(clientConfig{PerUserLogin: h.PerUserLogin})
 }
 
 func (h *Handlers) HandleRDPWebSocket(w http.ResponseWriter, r *http.Request) {
@@ -90,6 +108,7 @@ func (h *Handlers) HandleRDPWebSocket(w http.ResponseWriter, r *http.Request) {
 		RDPAddr:        h.RDPAddr,
 		StaticUsername: h.StaticRDPUsername,
 		StaticPassword: h.StaticRDPPassword,
+		PerUserLogin:   h.PerUserLogin,
 		CredRequests:   h.CredRequests,
 		Events:         h.SessionEvent,
 		Shutdown:       h.Shutdown,

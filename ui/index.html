@@ -30,7 +30,55 @@
         font-size: 1rem;
         pointer-events: none;
       }
+      #overlay.interactive { pointer-events: auto; }
       #status { font-size: 0.85rem; }
+      /* Login form */
+      #loginBox {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        padding: 28px 32px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        min-width: 280px;
+      }
+      #loginBox h2 {
+        margin: 0 0 4px;
+        font-size: 1.1rem;
+        color: #e2e8f0;
+        text-align: center;
+      }
+      #loginBox label {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-size: 0.85rem;
+        color: #94a3b8;
+      }
+      #loginBox input[type="text"],
+      #loginBox input[type="password"] {
+        padding: 8px 10px;
+        border-radius: 6px;
+        border: 1px solid #475569;
+        background: #0f172a;
+        color: #e2e8f0;
+        font-size: 0.95rem;
+        outline: none;
+      }
+      #loginBox input:focus { border-color: #1d4ed8; }
+      #loginBox .hint { font-size: 0.75rem; color: #64748b; }
+      #loginBox button {
+        padding: 9px 0;
+        border: 0;
+        border-radius: 6px;
+        background: #1d4ed8;
+        color: #fff;
+        font-size: 0.95rem;
+        cursor: pointer;
+      }
+      #loginBox button:hover { background: #1e40af; }
+      #loginError { color: #f87171; font-size: 0.82rem; text-align: center; }
       #toggleKeyboard {
         position: fixed;
         bottom: 16px;
@@ -49,7 +97,23 @@
   <body>
     <canvas id="display"></canvas>
     <div id="overlay">
-      <span>Connecting…</span>
+      <!-- login form (shown in per-user-login mode) -->
+      <div id="loginBox" style="display:none">
+        <h2>Remote Desktop Login</h2>
+        <label>
+          Username
+          <input type="text" id="loginUser" autocomplete="username" required />
+        </label>
+        <label>
+          Password
+          <input type="password" id="loginPass" autocomplete="current-password" />
+          <span class="hint">Leave blank for a passwordless account</span>
+        </label>
+        <div id="loginError"></div>
+        <button id="loginBtn">Connect</button>
+      </div>
+      <!-- connecting spinner (shown while WS is opening) -->
+      <span id="connectingMsg" style="display:none">Connecting…</span>
       <span id="status"></span>
     </div>
     <button id="toggleKeyboard">Keyboard</button>
@@ -60,6 +124,9 @@
       const ctx = canvas.getContext('2d');
       const overlay = document.getElementById('overlay');
       const status = document.getElementById('status');
+      const loginBox = document.getElementById('loginBox');
+      const connectingMsg = document.getElementById('connectingMsg');
+      const loginError = document.getElementById('loginError');
 
       // Fixed RDP session resolution - must match the server-side default.
       const RDP_WIDTH = 1280;
@@ -109,26 +176,69 @@
         Pause: 0xE11D,
       };
 
-      // ── WebSocket ─────────────────────────────────────────────────────────────
-      const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-      const ws = new WebSocket(`${protocol}://${location.host}/ws/rdp`);
-      ws.binaryType = 'blob';
+      // ── WebSocket helpers ─────────────────────────────────────────────────────
+      let ws = null;
 
-      ws.addEventListener('open', () => {
+      function showOverlay(interactive) {
+        overlay.style.display = 'flex';
+        if (interactive) overlay.classList.add('interactive');
+        else overlay.classList.remove('interactive');
+      }
+      function hideOverlay() {
         overlay.style.display = 'none';
-        canvas.focus();
-      });
-      ws.addEventListener('close', (e) => {
-        overlay.style.display = 'flex';
-        const reason = e.reason ? ` — ${e.reason}` : '';
-        status.textContent = `Disconnected (${e.code})${reason}`;
-      });
-      ws.addEventListener('error', () => {
-        overlay.style.display = 'flex';
-        status.textContent = 'Connection error';
-      });
+        overlay.classList.remove('interactive');
+      }
 
-      ws.addEventListener('message', (e) => {
+      function openWebSocket(authPayload) {
+        loginBox.style.display = 'none';
+        connectingMsg.style.display = '';
+        status.textContent = '';
+        showOverlay(false);
+
+        const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+        ws = new WebSocket(`${protocol}://${location.host}/ws/rdp`);
+        ws.binaryType = 'blob';
+
+        ws.addEventListener('open', () => {
+          if (authPayload) {
+            ws.send(JSON.stringify(authPayload));
+          }
+          hideOverlay();
+          canvas.focus();
+        });
+
+        ws.addEventListener('close', (e) => {
+          const reason = e.reason ? ` — ${e.reason}` : '';
+          const msg = `Disconnected (${e.code})${reason}`;
+          if (authPayload) {
+            // Per-user mode: go back to login form so the user can retry.
+            connectingMsg.style.display = 'none';
+            loginError.textContent = msg;
+            loginBox.style.display = '';
+            status.textContent = '';
+            showOverlay(true);
+          } else {
+            showOverlay(false);
+            status.textContent = msg;
+          }
+        });
+
+        ws.addEventListener('error', () => {
+          if (authPayload) {
+            connectingMsg.style.display = 'none';
+            loginError.textContent = 'Connection error';
+            loginBox.style.display = '';
+            showOverlay(true);
+          } else {
+            showOverlay(false);
+            status.textContent = 'Connection error';
+          }
+        });
+
+        ws.addEventListener('message', handleMessage);
+      }
+
+      function handleMessage(e) {
         let msg;
         try { msg = JSON.parse(e.data); } catch { return; }
         if (msg.type !== 'tile') return;
@@ -148,10 +258,49 @@
         for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
         url = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
         img.src = url;
-      });
+      }
 
       function send(msg) {
-        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+      }
+
+      // ── Startup: fetch server config ──────────────────────────────────────────
+      showOverlay(false);
+      connectingMsg.style.display = '';
+
+      fetch('/api/config')
+        .then(r => r.json())
+        .catch(() => ({ perUserLogin: false }))
+        .then(cfg => {
+          if (cfg.perUserLogin) {
+            // Show login form; WS will be opened on form submit.
+            connectingMsg.style.display = 'none';
+            loginError.textContent = '';
+            loginBox.style.display = '';
+            showOverlay(true);
+
+            document.getElementById('loginBtn').addEventListener('click', submitLogin);
+            document.getElementById('loginPass').addEventListener('keydown', (e) => {
+              if (e.key === 'Enter') submitLogin();
+            });
+            document.getElementById('loginUser').addEventListener('keydown', (e) => {
+              if (e.key === 'Enter') submitLogin();
+            });
+          } else {
+            // Non-per-user mode: connect immediately (existing behaviour).
+            openWebSocket(null);
+          }
+        });
+
+      function submitLogin() {
+        const username = document.getElementById('loginUser').value.trim();
+        if (!username) {
+          loginError.textContent = 'Username is required.';
+          return;
+        }
+        const password = document.getElementById('loginPass').value;
+        loginError.textContent = '';
+        openWebSocket({ type: 'auth', username, password });
       }
 
       // ── Keyboard ──────────────────────────────────────────────────────────────

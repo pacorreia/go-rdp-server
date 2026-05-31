@@ -16,6 +16,7 @@ import (
 const (
 	websocketWriteTimeout = 30 * time.Second
 	websocketCloseTimeout = time.Second
+	authReadTimeout       = 15 * time.Second
 )
 
 // RDPDialFunc is the signature used by Session to open an RDP connection.
@@ -43,6 +44,13 @@ type clientMsg struct {
 	Delta    int    `json:"delta,omitempty"` // scroll notches (positive=up, negative=down)
 }
 
+// authMsg is the first message sent by the browser in per-user login mode.
+type authMsg struct {
+	Type     string `json:"type"`     // always "auth"
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
 // Session is a worker goroutine handling one WebSocket ↔ RDP tunnel.
 type Session struct {
 	ID string
@@ -56,6 +64,13 @@ type Session struct {
 	// RDP credentials without contacting the broker.
 	StaticUsername string
 	StaticPassword string
+
+	// PerUserLogin, when true, activates per-user login mode: the session reads
+	// the first WebSocket message as an auth message and uses those credentials
+	// directly to dial RDP, bypassing the broker entirely. Passwordless Windows
+	// accounts are supported by temporarily setting a random password via
+	// broker.SetTempPassword.
+	PerUserLogin bool
 
 	CredRequests chan<- broker.CredRequest
 	Events       chan<- broker.SessionEvent
@@ -74,16 +89,40 @@ func (s *Session) Run(ctx context.Context) {
 		_ = s.Conn.Close()
 	}()
 
-	cred, ok := s.requestCredentials(ctx)
-	if !ok {
-		s.writeCloseMsg(websocket.CloseGoingAway, "server shutting down")
-		return
-	}
-	if cred.Err != nil {
-		log.Printf("session %s: credential error: %v", s.ID, cred.Err)
-		s.Events <- broker.SessionEvent{SessionID: s.ID, Type: broker.SessionError, Err: cred.Err}
-		s.writeCloseMsg(websocket.CloseInternalServerErr, "credential error")
-		return
+	var cred broker.CredResponse
+	if s.PerUserLogin {
+		username, password, ok := s.readAuth(ctx)
+		if !ok {
+			return
+		}
+		// Passwordless Windows accounts cannot authenticate over RDP with an
+		// empty password. Temporarily assign a random password for the duration
+		// of the session, then restore the empty password on exit.
+		if password == "" {
+			tempPass, cleanup, err := broker.SetTempPassword(username)
+			if err != nil {
+				log.Printf("session %s: passwordless workaround failed for %q: %v", s.ID, username, err)
+				s.Events <- broker.SessionEvent{SessionID: s.ID, Type: broker.SessionError, Err: err}
+				s.writeCloseMsg(websocket.CloseInternalServerErr, "authentication failed")
+				return
+			}
+			defer cleanup()
+			password = tempPass
+		}
+		cred = broker.CredResponse{SessionID: s.ID, Username: username, Password: password}
+	} else {
+		var ok bool
+		cred, ok = s.requestCredentials(ctx)
+		if !ok {
+			s.writeCloseMsg(websocket.CloseGoingAway, "server shutting down")
+			return
+		}
+		if cred.Err != nil {
+			log.Printf("session %s: credential error: %v", s.ID, cred.Err)
+			s.Events <- broker.SessionEvent{SessionID: s.ID, Type: broker.SessionError, Err: cred.Err}
+			s.writeCloseMsg(websocket.CloseInternalServerErr, "credential error")
+			return
+		}
 	}
 
 	rdp, err := s.dialRDP(ctx, cred)
@@ -97,6 +136,30 @@ func (s *Session) Run(ctx context.Context) {
 
 	inputDone := s.startInputReader(ctx, rdp)
 	s.tileLoop(ctx, rdp, inputDone)
+}
+
+// readAuth reads the first WebSocket message and expects it to be an auth
+// message. It returns the username and password extracted from the message.
+// On failure it sends an appropriate close frame and returns ok=false.
+func (s *Session) readAuth(ctx context.Context) (username, password string, ok bool) {
+	_ = s.Conn.SetReadDeadline(time.Now().Add(authReadTimeout))
+	_, raw, err := s.Conn.ReadMessage()
+	_ = s.Conn.SetReadDeadline(time.Time{}) // clear deadline for subsequent reads
+	if err != nil {
+		select {
+		case <-ctx.Done():
+		case <-s.Shutdown:
+		default:
+			s.writeCloseMsg(4000, "auth timeout")
+		}
+		return "", "", false
+	}
+	var msg authMsg
+	if err := json.Unmarshal(raw, &msg); err != nil || msg.Type != "auth" || msg.Username == "" {
+		s.writeCloseMsg(websocket.CloseUnsupportedData, "expected auth message")
+		return "", "", false
+	}
+	return msg.Username, msg.Password, true
 }
 
 // writeCloseMsg sends a WebSocket close frame to the client.

@@ -14,6 +14,7 @@ type config struct {
 	rdpPort          string
 	rdpUser          string
 	rdpPass          string
+	perUserLogin     bool
 	httpPort         string
 	maxSessions      int
 	logLevel         string
@@ -30,6 +31,7 @@ func parseFlags() *config {
 	flag.StringVar(&cfg.rdpPort, "rdp-port", getEnv("RDP_PORT", "3389"), "RDP target port")
 	flag.StringVar(&cfg.rdpUser, "rdp-user", getEnv("RDP_USER", ""), "RDP static username (bypasses temporary account creation)")
 	flag.StringVar(&cfg.rdpPass, "rdp-pass", getEnv("RDP_PASS", ""), "RDP static password (bypasses temporary account creation)")
+	flag.BoolVar(&cfg.perUserLogin, "per-user-login", false, "Show per-user login form; each browser user supplies their own credentials")
 	flag.StringVar(&cfg.httpPort, "http-port", getEnv("HTTP_PORT", "8080"), "HTTP/WebSocket listen port")
 	flag.IntVar(&cfg.maxSessions, "max-sessions", getEnvInt("MAX_SESSIONS", 10), "Maximum concurrent sessions (must be > 0)")
 	flag.StringVar(&cfg.logLevel, "log-level", "info", "Log level: debug, info, warn, error")

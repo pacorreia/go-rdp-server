@@ -15,3 +15,8 @@ func DeleteTempUser(username string) error {
 func AddToRDPGroup(username string) error {
 	return errors.New("RDP group management is only supported on Windows")
 }
+
+// SetTempPassword is not supported on non-Windows platforms.
+func SetTempPassword(username string) (password string, cleanup func(), err error) {
+	return "", func() {}, errors.New("passwordless account workaround is only supported on Windows")
+}
