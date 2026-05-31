@@ -56,6 +56,8 @@ func Connect(addr, domain, username, password string, width, height int) (RDPSes
 
 	s.c = c
 	if err := c.Login(domain, username, password); err != nil {
+		c.Close()
+		s.closeDone()
 		return nil, err
 	}
 	return s, nil
