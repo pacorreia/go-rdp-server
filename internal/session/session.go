@@ -153,7 +153,7 @@ func (s *Session) startInputReader(ctx context.Context, rdp display.RDPSession) 
 			case "mouseup":
 				rdp.MouseUp(msg.Button, msg.X, msg.Y)
 			case "mousewheel":
-				rdp.MouseWheel(msg.Delta, msg.X, msg.Y)
+				rdp.MouseWheel(msg.Delta)
 			}
 		}
 	}()

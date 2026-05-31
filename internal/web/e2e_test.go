@@ -59,7 +59,7 @@ func (f *fakeRDPSession) KeyUp(_ int)                    {}
 func (f *fakeRDPSession) MouseMove(_, _ int)             {}
 func (f *fakeRDPSession) MouseDown(_, _, _ int)          {}
 func (f *fakeRDPSession) MouseUp(_, _, _ int)            {}
-func (f *fakeRDPSession) MouseWheel(_, _, _ int)         {}
+func (f *fakeRDPSession) MouseWheel(_ int)               {}
 func (f *fakeRDPSession) Close()                         {}
 
 func TestE2EWebsocketFlow(t *testing.T) {

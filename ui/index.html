@@ -183,7 +183,7 @@
       canvas.addEventListener('contextmenu', (e) => e.preventDefault());
       canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
-        // Positive deltaY = scroll down → negative notch; RDP convention: positive = up.
+        // Browser deltaY: positive = scroll down. RDP convention: positive = scroll up.
         const delta = e.deltaY > 0 ? -1 : 1;
         send({ type: 'mousewheel', delta, x: e.offsetX, y: e.offsetY });
       }, { passive: false });

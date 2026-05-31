@@ -29,7 +29,8 @@ type RDPSession interface {
 	// MouseUp sends a mouse button release. button: 0=left, 1=middle, 2=right.
 	MouseUp(button, x, y int)
 	// MouseWheel sends a scroll-wheel event.
-	MouseWheel(delta, x, y int)
+	// delta is positive for scroll-up, negative for scroll-down.
+	MouseWheel(delta int)
 
 	// Close terminates the RDP session.
 	Close()
