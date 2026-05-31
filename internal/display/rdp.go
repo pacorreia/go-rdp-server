@@ -89,8 +89,8 @@ func (s *rdpSession) sendTile(tile Tile) (done bool) {
 
 func (s *rdpSession) closeDone() {
 	s.closeOnce.Do(func() {
-		close(s.done)
 		s.mu.Lock()
+		close(s.done)
 		s.closed = true
 		close(s.tiles)
 		s.mu.Unlock()
