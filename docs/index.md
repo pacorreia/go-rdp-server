@@ -7,7 +7,6 @@ title: Home
 [![Build](https://github.com/pacorreia/go-rdp-server/actions/workflows/build.yml/badge.svg)](https://github.com/pacorreia/go-rdp-server/actions/workflows/build.yml)
 [![Latest Release](https://img.shields.io/github/v/release/pacorreia/go-rdp-server?sort=semver)](https://github.com/pacorreia/go-rdp-server/releases)
 [![Go Version](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go)](https://go.dev/)
-[![License](https://img.shields.io/github/license/pacorreia/go-rdp-server)](https://github.com/pacorreia/go-rdp-server/blob/main/LICENSE)
 
 A lightweight, browser-based RDP gateway that brokers temporary Windows credentials and tunnels WebSocket traffic through the Guacamole protocol to `guacd`.
 
