@@ -61,7 +61,7 @@ flowchart LR
 ```
 
 !!! tip "Local docs build"
-    Install the doc dependencies and build the site locally:
+    Install the doc dependencies and generate the static site into `site/` (no server is started):
 
     ```bash
     pip install -r requirements.txt
