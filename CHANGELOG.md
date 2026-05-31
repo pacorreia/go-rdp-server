@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.0](https://github.com/pacorreia/go-rdp-server/compare/v1.2.0...v1.3.0) (2026-05-31)
+
+
+### Features
+
+* add workflow_dispatch trigger for on-demand releases ([d5333c7](https://github.com/pacorreia/go-rdp-server/commit/d5333c75e007b4482135d6e45b754a03cabc8f41))
+
+
+### Bug Fixes
+
+* patch grdp v0.8.6 assembly - rename Intel mnemonics to Go Plan 9 equivalents ([e28f8c5](https://github.com/pacorreia/go-rdp-server/commit/e28f8c5c1431c42bb60fa12b4bfdd1c88b71202e))
+* resolve merge conflicts - incorporate gorilla/websocket v1.5.3 and update Go 1.26 across CI, README, docs ([604c0a3](https://github.com/pacorreia/go-rdp-server/commit/604c0a3ded96aa0e7092d19155807206ea33d2ba))
+
 ## [1.2.0](https://github.com/pacorreia/go-rdp-server/compare/v1.1.0...v1.2.0) (2026-05-31)
 
 
