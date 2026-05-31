@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.1](https://github.com/pacorreia/go-rdp-server/compare/v1.0.0...v1.0.1) (2026-05-31)
+
+
+### Bug Fixes
+
+* align docs theme palette with vaults-syncer ([fa432e3](https://github.com/pacorreia/go-rdp-server/commit/fa432e3dd55005c111b35cd2f7cbd386f1e1f6cf))
+* align palette with vaults-syncer - add media queries and material icons ([cadb4bc](https://github.com/pacorreia/go-rdp-server/commit/cadb4bc68d099e6362e8ef8f52710985bbb25009))
+
 ## 1.0.0 (2026-05-31)
 
 
