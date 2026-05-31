@@ -24,7 +24,7 @@ jobs:
     steps:
       - name: Run Release Please
         if: github.event_name == 'push'
-        uses: googleapis/release-please-action@v4
+        uses: googleapis/release-please-action@v5
         id: release
         with:
           config-file: release-please-config.json
@@ -115,7 +115,7 @@ jobs:
           fi
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/rdpserver-${{ matrix.goos }}-${{ matrix.goarch }}.${{ matrix.archive }}
@@ -126,14 +126,14 @@ jobs:
     if: ${{ needs.prepare.outputs.release_created == 'true' }}
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: dist
           pattern: release-*
           merge-multiple: true
 
       - name: Publish release assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.prepare.outputs.tag_name }}
           files: dist/*
