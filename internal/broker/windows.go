@@ -167,6 +167,9 @@ func setUserPassword(username, password string) error {
 	return nil
 }
 
+// ImpersonateUser calls LogonUserW to obtain an interactive logon token for
+// the given local account. The caller MUST close the returned token with
+// token.Close() when it is no longer needed to prevent a handle leak.
 func ImpersonateUser(username, password string) (windows.Token, error) {
 	usernamePtr, err := windows.UTF16PtrFromString(username)
 	if err != nil {

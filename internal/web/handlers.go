@@ -47,6 +47,12 @@ type clientConfig struct {
 
 const websocketCloseMessageTimeout = time.Second
 
+// maxWebSocketMessageSize is the maximum size (in bytes) accepted for a single
+// WebSocket message from a browser client.  Input events are tiny JSON objects;
+// 4 KiB is generous and prevents a malicious client from sending very large
+// messages to exhaust server memory.
+const maxWebSocketMessageSize = 4096
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
@@ -68,6 +74,10 @@ func isAllowedOrigin(r *http.Request) bool {
 // HandleConfig returns a small JSON object that the browser reads on startup
 // to decide how to behave (e.g. whether to show the per-user login form).
 func (h *Handlers) HandleConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(clientConfig{PerUserLogin: h.PerUserLogin})
 }
@@ -82,6 +92,9 @@ func (h *Handlers) HandleRDPWebSocket(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
+	// Cap incoming message size to prevent a malicious client from sending an
+	// arbitrarily large payload that would exhaust server memory.
+	conn.SetReadLimit(maxWebSocketMessageSize)
 
 	sessionID := uuid.NewString()
 	if err := h.Manager.Admit(sessionID); err != nil {

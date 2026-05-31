@@ -17,6 +17,11 @@ const (
 	websocketWriteTimeout = 30 * time.Second
 	websocketCloseTimeout = time.Second
 	authReadTimeout       = 15 * time.Second
+
+	// maxUsernameLen is the maximum accepted username length in per-user login
+	// mode. Windows SAM account names are limited to 20 characters, but UPN and
+	// domain\user formats can be longer. 256 characters is a safe upper bound.
+	maxUsernameLen = 256
 )
 
 // RDPDialFunc is the signature used by Session to open an RDP connection.
@@ -157,7 +162,7 @@ func (s *Session) readAuth(ctx context.Context) (username, password string, ok b
 		return "", "", false
 	}
 	var msg authMsg
-	if err := json.Unmarshal(raw, &msg); err != nil || msg.Type != "auth" || msg.Username == "" {
+	if err := json.Unmarshal(raw, &msg); err != nil || msg.Type != "auth" || msg.Username == "" || len(msg.Username) > maxUsernameLen {
 		s.writeCloseMsg(websocket.CloseUnsupportedData, "expected auth message")
 		return "", "", false
 	}
@@ -238,21 +243,55 @@ func (s *Session) startInputReader(ctx context.Context, rdp display.RDPSession) 
 			}
 			switch msg.Type {
 			case "keydown":
-				rdp.KeyDown(msg.Scancode)
+				rdp.KeyDown(clampScancode(msg.Scancode))
 			case "keyup":
-				rdp.KeyUp(msg.Scancode)
+				rdp.KeyUp(clampScancode(msg.Scancode))
 			case "mousemove":
 				rdp.MouseMove(msg.X, msg.Y)
 			case "mousedown":
-				rdp.MouseDown(msg.Button, msg.X, msg.Y)
+				rdp.MouseDown(clampButton(msg.Button), msg.X, msg.Y)
 			case "mouseup":
-				rdp.MouseUp(msg.Button, msg.X, msg.Y)
+				rdp.MouseUp(clampButton(msg.Button), msg.X, msg.Y)
 			case "mousewheel":
-				rdp.MouseWheel(msg.Delta)
+				rdp.MouseWheel(clampWheelDelta(msg.Delta))
 			}
 		}
 	}()
 	return done
+}
+
+// clampScancode ensures a PS/2 scancode sent by the browser is within the
+// valid 16-bit range [0x0000, 0xFFFF]. Values outside this range are zeroed
+// to prevent unexpected behaviour in the underlying RDP library.
+func clampScancode(sc int) int {
+	if sc < 0 || sc > 0xFFFF {
+		return 0
+	}
+	return sc
+}
+
+// clampButton constrains a mouse-button index to the three values recognised
+// by the RDP protocol: 0 (left), 1 (middle), 2 (right). Any other value is
+// mapped to 0.
+func clampButton(b int) int {
+	if b < 0 || b > 2 {
+		return 0
+	}
+	return b
+}
+
+// clampWheelDelta constrains a scroll-wheel delta to [-1, 1] (one notch per
+// event), matching the values the browser UI already sends. Extreme values
+// from a malicious client are clamped rather than forwarded verbatim.
+func clampWheelDelta(d int) int {
+	switch {
+	case d > 0:
+		return 1
+	case d < 0:
+		return -1
+	default:
+		return 0
+	}
 }
 
 // tileLoop reads tile updates from the RDP session and writes them as JSON to
