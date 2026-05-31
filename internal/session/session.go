@@ -162,8 +162,16 @@ func (s *Session) readAuth(ctx context.Context) (username, password string, ok b
 		return "", "", false
 	}
 	var msg authMsg
-	if err := json.Unmarshal(raw, &msg); err != nil || msg.Type != "auth" || msg.Username == "" || len(msg.Username) > maxUsernameLen {
+	if err := json.Unmarshal(raw, &msg); err != nil || msg.Type != "auth" {
 		s.writeCloseMsg(websocket.CloseUnsupportedData, "expected auth message")
+		return "", "", false
+	}
+	if msg.Username == "" {
+		s.writeCloseMsg(websocket.CloseUnsupportedData, "username is required")
+		return "", "", false
+	}
+	if len(msg.Username) > maxUsernameLen {
+		s.writeCloseMsg(websocket.ClosePolicyViolation, "username too long")
 		return "", "", false
 	}
 	return msg.Username, msg.Password, true
@@ -281,8 +289,10 @@ func clampButton(b int) int {
 }
 
 // clampWheelDelta constrains a scroll-wheel delta to [-1, 1] (one notch per
-// event), matching the values the browser UI already sends. Extreme values
-// from a malicious client are clamped rather than forwarded verbatim.
+// event). The browser UI already sends only -1 or 1, but this clamp is
+// defense-in-depth: a malicious WebSocket client could bypass the UI and send
+// an arbitrarily large delta value, which we don't want to forward verbatim to
+// the RDP library.
 func clampWheelDelta(d int) int {
 	switch {
 	case d > 0:
