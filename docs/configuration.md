@@ -28,23 +28,6 @@ All runtime behaviour is controlled through environment variables. No configurat
 !!! note "RDP target"
     `RDP_HOST` and `RDP_PORT` point `guacd` at the Windows RDP server. In a single-host setup both `go-rdp-server` and the RDP target are the same machine (`127.0.0.1`).
 
-## Example: Docker environment
-
-```yaml
-services:
-  go-rdp-server:
-    image: ghcr.io/pacorreia/go-rdp-server:latest
-    environment:
-      - GUACD_HOST=guacd
-      - GUACD_PORT=4822
-      - RDP_HOST=rdp-target
-      - RDP_PORT=3389
-      - HTTP_PORT=8080
-      - MAX_SESSIONS=5
-    ports:
-      - "8080:8080"
-```
-
 ## Example: PowerShell (Windows Service)
 
 ```powershell
