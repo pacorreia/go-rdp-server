@@ -17,9 +17,10 @@ Run `rdpserver.exe -help` to see all available flags.
 | `-rdp-user` | `RDP_USER` | _(none)_ | Static RDP username; bypasses temporary account creation and per-user login |
 | `-rdp-pass` | `RDP_PASS` | _(none)_ | Static RDP password; used together with `-rdp-user` |
 | `-per-user-login` | `PER_USER_LOGIN` | `true` | Show a per-user login form; each browser session supplies its own credentials |
-| `-allow-passwordless` | `ALLOW_PASSWORDLESS` | `false` | Allow the passwordless-account workaround in per-user login mode (requires NetUserSetInfo privileges; see below) |
+| `-allow-passwordless` | `ALLOW_PASSWORDLESS` | `false` | Deprecated compatibility flag; empty passwords are rejected in per-user login mode |
 | `-http-port` | `HTTP_PORT` | `8080` | HTTP/WebSocket listen port |
 | `-max-sessions` | `MAX_SESSIONS` | `10` | Maximum concurrent active sessions |
+| `-max-conns-per-ip` | `MAX_CONNS_PER_IP` | `3` | Maximum concurrent WebSocket sessions per source IP (`0` disables the per-IP limit) |
 | `-log-level` | — | `info` | Log verbosity: `debug`, `info`, `warn`, `error` |
 | `-install-service` | — | — | Install as a Windows Service and exit (Windows only) |
 | `-uninstall-service` | — | — | Uninstall the Windows Service and exit (Windows only) |
@@ -46,7 +47,10 @@ Run `rdpserver.exe -help` to see all available flags.
     Use non-public network placement for `-http-port`. In the default per-user login mode the browser login form provides credential-based access control, but this should not be the only security boundary — protect the endpoint with a reverse proxy or network policy.
 
 !!! warning "Passwordless account workaround"
-    `-allow-passwordless` causes the server to temporarily mutate the password of any local Windows account that authenticates with an empty password. Enable this only when the service runs as a privileged account on a machine with tightly controlled network access. Without this flag, empty passwords are rejected.
+    Empty passwords are rejected in per-user login mode. The `-allow-passwordless` flag is retained only for compatibility with previous releases and has no effect.
+
+!!! warning "Reverse proxy deployments"
+    The per-IP WebSocket limiter keys on the request source IP. In reverse-proxy deployments, configure trusted client-IP forwarding at the proxy layer and set `-max-conns-per-ip=0` if you need to disable the built-in per-IP limiter.
 
 !!! note "Static credentials vs per-user login"
     `-rdp-user` / `-rdp-pass` take precedence over `-per-user-login`: when a static username is set, all browser sessions share the same RDP credentials and no login form is shown.

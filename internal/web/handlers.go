@@ -18,12 +18,11 @@ import (
 	"github.com/pacorreia/go-rdp-server/internal/session"
 )
 
-// maxConnsPerIP is the maximum number of concurrent WebSocket connections
+// By default, the server limits concurrent WebSocket connections by source IP
 // accepted from a single remote IP address.  This limits slot-holding DoS
 // attacks: even if an attacker holds connections open for the full
-// authReadTimeout, they can only occupy maxConnsPerIP slots rather than
+// authReadTimeout, they can only occupy a handful of slots rather than
 // draining the entire session pool.
-const maxConnsPerIP = 3
 
 // ipTracker tracks the number of concurrent WebSocket connections per remote
 // IP.  It is embedded by value in Handlers so the zero value is ready to use.
@@ -32,9 +31,12 @@ type ipTracker struct {
 	conns map[string]int
 }
 
-// acquire increments the connection count for ip.  It returns false if the
-// count would exceed maxConnsPerIP.
-func (t *ipTracker) acquire(ip string) bool {
+// acquire increments the connection count for ip. It returns false if the
+// count would exceed maxConnsPerIP. A maxConnsPerIP of 0 disables the limit.
+func (t *ipTracker) acquire(ip string, maxConnsPerIP int) bool {
+	if maxConnsPerIP <= 0 {
+		return true
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.conns == nil {
@@ -51,7 +53,10 @@ func (t *ipTracker) acquire(ip string) bool {
 func (t *ipTracker) release(ip string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.conns[ip] == 1 {
+	if t.conns == nil {
+		return
+	}
+	if t.conns[ip] <= 1 {
 		delete(t.conns, ip)
 	} else {
 		t.conns[ip]--
@@ -78,14 +83,15 @@ type Handlers struct {
 	// containing the user's credentials. The broker is not used.
 	PerUserLogin bool
 
-	// AllowPasswordless, when true, enables the passwordless-account workaround:
-	// if the browser sends an empty password the server calls
-	// broker.SetTempPassword to temporarily assign a random password for the
-	// duration of the session. Must be explicitly opted into by the operator.
+	// AllowPasswordless is retained for backwards compatibility with previous
+	// config surfaces. Empty passwords are rejected in per-user login mode.
 	AllowPasswordless bool
 
 	// RDPDial, when non-nil, is forwarded to each session worker as a test hook.
 	RDPDial session.RDPDialFunc
+
+	// MaxConnsPerIP limits concurrent connections per source IP. Set to 0 to disable.
+	MaxConnsPerIP int
 
 	// tracker limits concurrent connections per remote IP.
 	tracker ipTracker
@@ -146,7 +152,11 @@ func (h *Handlers) HandleRDPWebSocket(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad remote address", http.StatusBadRequest)
 		return
 	}
-	if !h.tracker.acquire(remoteIP) {
+	maxConnsPerIP := h.MaxConnsPerIP
+	if maxConnsPerIP < 0 {
+		maxConnsPerIP = 0
+	}
+	if !h.tracker.acquire(remoteIP, maxConnsPerIP) {
 		http.Error(w, "too many connections from your IP", http.StatusTooManyRequests)
 		return
 	}

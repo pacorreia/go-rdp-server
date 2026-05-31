@@ -63,7 +63,7 @@ type clientMsg struct {
 
 // authMsg is the first message sent by the browser in per-user login mode.
 type authMsg struct {
-	Type     string `json:"type"`     // always "auth"
+	Type     string `json:"type"` // always "auth"
 	Username string `json:"username"`
 	Password string `json:"password"`
 }
@@ -84,17 +84,11 @@ type Session struct {
 
 	// PerUserLogin, when true, activates per-user login mode: the session reads
 	// the first WebSocket message as an auth message and uses those credentials
-	// directly to dial RDP, bypassing the broker entirely. Passwordless Windows
-	// accounts are supported by temporarily setting a random password via
-	// broker.SetTempPassword, but only when AllowPasswordless is also true.
+	// directly to dial RDP, bypassing the broker entirely.
 	PerUserLogin bool
 
-	// AllowPasswordless, when true, enables the passwordless-account workaround
-	// in per-user login mode: if the browser sends an empty password the server
-	// calls broker.SetTempPassword to temporarily assign a random password for
-	// the duration of the session. This requires elevated privileges
-	// (NetUserSetInfo) and must be explicitly opted into by the operator via
-	// --allow-passwordless. When false, an empty password is rejected.
+	// AllowPasswordless is retained for backwards compatibility with previous
+	// config surfaces. Empty passwords are rejected in per-user login mode.
 	AllowPasswordless bool
 
 	CredRequests chan<- broker.CredRequest
@@ -127,26 +121,10 @@ func (s *Session) Run(ctx context.Context) {
 		if !ok {
 			return
 		}
-		// Passwordless Windows accounts cannot authenticate over RDP with an
-		// empty password. Temporarily assign a random password for the duration
-		// of the session, then restore the empty password on exit.
-		// This behaviour requires NetUserSetInfo privileges and must be
-		// explicitly enabled by the operator via --allow-passwordless.
 		if password == "" {
-			if !s.AllowPasswordless {
-				log.Printf("session %s: empty password rejected for %q (--allow-passwordless not set)", s.ID, username)
-				s.writeCloseMsg(websocket.CloseUnsupportedData, "empty password not allowed")
-				return
-			}
-			tempPass, cleanup, err := broker.SetTempPassword(username)
-			if err != nil {
-				log.Printf("session %s: passwordless workaround failed for %q: %v", s.ID, username, err)
-				s.Events <- broker.SessionEvent{SessionID: s.ID, Type: broker.SessionError, Err: err}
-				s.writeCloseMsg(websocket.CloseInternalServerErr, "authentication failed")
-				return
-			}
-			defer cleanup()
-			password = tempPass
+			log.Printf("session %s: empty password rejected for %q", s.ID, username)
+			s.writeCloseMsg(websocket.CloseUnsupportedData, "password is required")
+			return
 		}
 		cred = broker.CredResponse{SessionID: s.ID, Username: username, Password: password}
 	} else {
