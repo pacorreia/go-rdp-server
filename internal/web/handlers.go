@@ -22,9 +22,10 @@ type Handlers struct {
 	Shutdown     <-chan struct{}
 	Ctx          context.Context
 
-	GuacdAddr string
-	RDPHost   string
-	RDPPort   string
+	RDPAddr string
+
+	// RDPDial, when non-nil, is forwarded to each session worker as a test hook.
+	RDPDial session.RDPDialFunc
 }
 
 const websocketCloseMessageTimeout = time.Second
@@ -80,12 +81,11 @@ func (h *Handlers) HandleRDPWebSocket(w http.ResponseWriter, r *http.Request) {
 	worker := &session.Session{
 		ID:           sessionID,
 		Conn:         conn,
-		GuacdAddr:    h.GuacdAddr,
-		RDPHost:      h.RDPHost,
-		RDPPort:      h.RDPPort,
+		RDPAddr:      h.RDPAddr,
 		CredRequests: h.CredRequests,
 		Events:       h.SessionEvent,
 		Shutdown:     h.Shutdown,
+		RDPDial:      h.RDPDial,
 	}
 
 	go worker.Run(ctx)

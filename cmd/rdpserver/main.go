@@ -36,8 +36,6 @@ func runConsole() error {
 }
 
 func runServer(ctx context.Context) error {
-	guacdHost := getEnv("GUACD_HOST", "127.0.0.1")
-	guacdPort := getEnv("GUACD_PORT", "4822")
 	rdpHost := getEnv("RDP_HOST", "127.0.0.1")
 	rdpPort := getEnv("RDP_PORT", "3389")
 	httpPort := getEnv("HTTP_PORT", "8080")
@@ -85,9 +83,7 @@ func runServer(ctx context.Context) error {
 		SessionEvent: sessionEvents,
 		Shutdown:     shutdown,
 		Ctx:          ctx,
-		GuacdAddr:    fmt.Sprintf("%s:%s", guacdHost, guacdPort),
-		RDPHost:      rdpHost,
-		RDPPort:      rdpPort,
+		RDPAddr:      fmt.Sprintf("%s:%s", rdpHost, rdpPort),
 	}
 	server := web.NewServer(":"+httpPort, handlers)
 
