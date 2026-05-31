@@ -11,7 +11,7 @@ Service name: `go-rdp-server`
 ```powershell
 go build -o rdpserver.exe ./cmd/rdpserver
 sc.exe create go-rdp-server binPath= "C:\path\to\rdpserver.exe" start= auto
-sc.exe description go-rdp-server "WebSocket to guacd RDP bridge service"
+sc.exe description go-rdp-server "Browser-based RDP gateway service"
 ```
 
 ## Operate
@@ -40,11 +40,7 @@ sc.exe query go-rdp-server
     ```
 
 !!! note "Dependency ordering"
-    Ensure `guacd` is reachable before the service starts. Add it as a service dependency if `guacd` is also managed by the SCM:
-
-    ```powershell
-    sc.exe config go-rdp-server depend= guacd
-    ```
+    Ensure the RDP port is reachable before the service starts.
 
 ## Firewall
 

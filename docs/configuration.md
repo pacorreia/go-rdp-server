@@ -10,8 +10,6 @@ All runtime behaviour is controlled through environment variables. No configurat
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `GUACD_HOST` | `127.0.0.1` | Host where `guacd` is reachable |
-| `GUACD_PORT` | `4822` | `guacd` listening port |
 | `RDP_HOST` | `127.0.0.1` | Target RDP host |
 | `RDP_PORT` | `3389` | Target RDP port |
 | `HTTP_PORT` | `8080` | HTTP/WebSocket listen port |
@@ -26,13 +24,11 @@ All runtime behaviour is controlled through environment variables. No configurat
     Use non-public network placement for `HTTP_PORT`. The embedded client performs no authentication — protect the endpoint with a reverse proxy or network policy.
 
 !!! note "RDP target"
-    `RDP_HOST` and `RDP_PORT` point `guacd` at the Windows RDP server. In a single-host setup both `go-rdp-server` and the RDP target are the same machine (`127.0.0.1`).
+    `RDP_HOST` and `RDP_PORT` point the built-in RDP client at the Windows RDP server. In a single-host setup the RDP target is the same machine (`127.0.0.1`).
 
 ## Example: PowerShell (Windows Service)
 
 ```powershell
-[System.Environment]::SetEnvironmentVariable("GUACD_HOST", "127.0.0.1", "Machine")
-[System.Environment]::SetEnvironmentVariable("GUACD_PORT", "4822",      "Machine")
 [System.Environment]::SetEnvironmentVariable("RDP_HOST",   "127.0.0.1", "Machine")
 [System.Environment]::SetEnvironmentVariable("RDP_PORT",   "3389",      "Machine")
 [System.Environment]::SetEnvironmentVariable("HTTP_PORT",  "8080",      "Machine")

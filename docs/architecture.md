@@ -12,8 +12,8 @@ title: Architecture
 | `internal/web` | HTTP server, index handler, WebSocket upgrade, and session spawn |
 | `internal/session` | Session admission manager and per-session proxy workers |
 | `internal/broker` | Temporary Windows account lifecycle and credential broker loop |
-| `internal/guacd` | Guacamole protocol instruction codec and TCP client |
-| `ui` | Embedded static HTML/JS client |
+| `internal/display` | Pure-Go RDP client interface and `grdp`-backed implementation |
+| `ui` | Embedded static HTML/JS canvas client |
 
 ## Component diagram
 
@@ -23,8 +23,8 @@ flowchart TD
     Web -->|CredRequest chan| Broker["internal/broker\nCredential broker"]
     Broker -->|Win32 NetUserAdd| WinAccounts["Windows local accounts"]
     Web -->|SessionEvent chan| Manager["internal/session\nSession manager"]
-    Web -->|TCP| Guacd["guacd\n(Guacamole daemon)"]
-    Guacd -->|RDP| WinRDP["Windows RDP Server"]
+    Manager -->|display.Connect| Display["internal/display\ngrdp RDP client"]
+    Display -->|RDP| WinRDP["Windows RDP Server"]
 ```
 
 ## Runtime flow
@@ -32,9 +32,10 @@ flowchart TD
 1. Client connects to `/ws/rdp`.
 2. Session manager enforces `MAX_SESSIONS`.
 3. Broker provisions a temporary local user and returns credentials.
-4. Session worker connects to `guacd` and sends the RDP handshake.
-5. WebSocket and `guacd` traffic are proxied bidirectionally.
-6. On close, error, or shutdown the temporary account is deleted and capacity is released.
+4. Session worker opens an RDP connection via the pure-Go `grdp` client.
+5. Bitmap tile updates are JPEG-encoded and forwarded to the browser as JSON WebSocket messages.
+6. Keyboard and mouse input arrives as JSON messages and is forwarded to the RDP session.
+7. On close, error, or shutdown the temporary account is deleted and capacity is released.
 
 ```mermaid
 sequenceDiagram
@@ -42,22 +43,43 @@ sequenceDiagram
     participant Web
     participant Manager
     participant Broker
-    participant Guacd
+    participant Display
 
     Browser->>Web: WebSocket connect /ws/rdp
     Web->>Manager: Admit(sessionID)
     Web->>Broker: CredRequest
     Broker-->>Web: CredResponse (username, password)
-    Web->>Guacd: TCP connect + RDP handshake
+    Web->>Display: display.Connect (grdp)
     loop Proxy
-        Browser->>Web: guacd instruction
-        Web->>Guacd: forward
-        Guacd-->>Web: guacd instruction
-        Web-->>Browser: forward
+        Display-->>Web: Tile (JPEG bitmap)
+        Web-->>Browser: JSON tile message
+        Browser->>Web: JSON input message
+        Web->>Display: KeyDown/MouseMove/…
     end
     Browser->>Web: close
     Web->>Manager: SessionClosed event
     Web->>Broker: SessionClosed event → delete temp user
+```
+
+## Wire protocol
+
+Messages between browser and server are JSON objects sent over WebSocket.
+
+**Server → Browser (tile update)**
+
+```json
+{ "type": "tile", "x": 0, "y": 0, "w": 200, "h": 100, "data": "<base64 JPEG>" }
+```
+
+**Browser → Server (input events)**
+
+```json
+{ "type": "keydown",    "scancode": 28 }
+{ "type": "keyup",      "scancode": 28 }
+{ "type": "mousemove",  "x": 320, "y": 240 }
+{ "type": "mousedown",  "button": 0, "x": 320, "y": 240 }
+{ "type": "mouseup",    "button": 0, "x": 320, "y": 240 }
+{ "type": "mousewheel", "delta": 3 }
 ```
 
 ## Shutdown behaviour

@@ -1,6 +1,6 @@
 # go-rdp-server
 
-`go-rdp-server` is a channel-based Go service that bridges browser WebSocket clients to `guacd` and Windows RDP sessions using temporary local user accounts.
+`go-rdp-server` is a channel-based Go service that bridges browser WebSocket clients to Windows RDP sessions using a pure-Go RDP client and temporary local user accounts.
 
 ## Full review snapshot
 
@@ -8,7 +8,8 @@ Current implementation is production-oriented and includes:
 
 - Session admission control (`MAX_SESSIONS`) through a dedicated manager goroutine
 - Temporary Windows account lifecycle management through broker events
-- WebSocket ↔ `guacd` proxy workers for each active session
+- Pure-Go RDP client (`github.com/nakagami/grdp`) — no external `guacd` daemon needed
+- JSON WebSocket wire protocol with base64-encoded JPEG tile updates and canvas-based browser UI
 - Graceful shutdown propagation across broker, manager, and HTTP server
 - Native Windows Service mode (`go-rdp-server`) with SCM lifecycle handling
 - CI for pull requests and release automation for tagged binaries
@@ -16,22 +17,19 @@ Current implementation is production-oriented and includes:
 ## Architecture at a glance
 
 1. `internal/web` upgrades `/ws/rdp` requests and creates session workers.
-2. `internal/session` enforces capacity and proxies WebSocket and `guacd` traffic.
+2. `internal/session` enforces capacity and proxies WebSocket and RDP traffic.
 3. `internal/broker` provisions and cleans temporary Windows users per session.
-4. `internal/guacd` handles Guacamole protocol instruction encode/decode and TCP IO.
+4. `internal/display` wraps the `grdp` RDP client and exposes a `RDPSession` interface.
 
 ## Prerequisites
 
 - Windows host with Remote Desktop enabled
-- `guacd` installed and running with required privileges
-- Go 1.23+
+- Go 1.24+
 
 ## Configuration
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `GUACD_HOST` | `127.0.0.1` | `guacd` host |
-| `GUACD_PORT` | `4822` | `guacd` TCP port |
 | `RDP_HOST` | `127.0.0.1` | RDP target hostname/IP |
 | `RDP_PORT` | `3389` | RDP target port |
 | `HTTP_PORT` | `8080` | HTTP/WebSocket listen port |
@@ -54,7 +52,7 @@ When started by SCM, the binary runs in service mode and handles `Start`, `Stop`
 ```powershell
 go build -o rdpserver.exe ./cmd/rdpserver
 sc.exe create go-rdp-server binPath= "C:\path\to\rdpserver.exe" start= auto
-sc.exe description go-rdp-server "WebSocket to guacd RDP bridge service"
+sc.exe description go-rdp-server "Browser-based RDP gateway service"
 ```
 
 ### Recommended hardening
@@ -67,7 +65,6 @@ sc.exe description go-rdp-server "WebSocket to guacd RDP bridge service"
   ```
 
 - Restrict inbound access to trusted networks
-- Ensure `guacd` starts before this service
 
 ### Service management
 
