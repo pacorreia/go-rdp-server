@@ -92,10 +92,9 @@ flowchart TD
 === "Windows Service"
 
     ```powershell
-    # Build and register as a Windows Service
+    # Build and register as a Windows Service using the built-in flag
     go build -o rdpserver.exe ./cmd/rdpserver
-    sc.exe create go-rdp-server binPath= "C:\path\to\rdpserver.exe" start= auto
-    sc.exe description go-rdp-server "Browser-based RDP gateway service"
+    .\rdpserver.exe -install-service
     sc.exe start go-rdp-server
     ```
 

@@ -28,12 +28,15 @@ Current implementation is production-oriented and includes:
 
 ## Configuration
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `RDP_HOST` | `127.0.0.1` | RDP target hostname/IP |
-| `RDP_PORT` | `3389` | RDP target port |
-| `HTTP_PORT` | `8080` | HTTP/WebSocket listen port |
-| `MAX_SESSIONS` | `10` | Concurrent session cap |
+| Flag | Env variable | Default | Description |
+| --- | --- | --- | --- |
+| `-rdp-host` | `RDP_HOST` | `127.0.0.1` | RDP target hostname/IP |
+| `-rdp-port` | `RDP_PORT` | `3389` | RDP target port |
+| `-http-port` | `HTTP_PORT` | `8080` | HTTP/WebSocket listen port |
+| `-max-sessions` | `MAX_SESSIONS` | `10` | Concurrent session cap |
+| `-log-level` | — | `info` | Log level: `debug`, `info`, `warn`, `error` |
+| `-install-service` | — | — | Install as Windows Service and exit (Windows only) |
+| `-uninstall-service` | — | — | Uninstall Windows Service and exit (Windows only) |
 
 ## Local run
 
@@ -51,8 +54,7 @@ When started by SCM, the binary runs in service mode and handles `Start`, `Stop`
 
 ```powershell
 go build -o rdpserver.exe ./cmd/rdpserver
-sc.exe create go-rdp-server binPath= "C:\path\to\rdpserver.exe" start= auto
-sc.exe description go-rdp-server "Browser-based RDP gateway service"
+.\rdpserver.exe -install-service
 ```
 
 ### Recommended hardening

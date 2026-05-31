@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
-	"os"
-	"strconv"
 	"time"
 
 	"github.com/pacorreia/go-rdp-server/internal/broker"
@@ -16,31 +14,47 @@ import (
 )
 
 func main() {
-	handled, err := runAsWindowsService()
+	cfg := parseFlags()
+	setupLogging(cfg.logLevel)
+
+	if cfg.installService {
+		if err := installService(serviceName, serviceDescription); err != nil {
+			slog.Error("install service failed", "error", err)
+		} else {
+			slog.Info("service installed", "name", serviceName)
+		}
+		return
+	}
+	if cfg.uninstallService {
+		if err := uninstallService(serviceName); err != nil {
+			slog.Error("uninstall service failed", "error", err)
+		} else {
+			slog.Info("service uninstalled", "name", serviceName)
+		}
+		return
+	}
+
+	handled, err := runAsWindowsService(cfg)
 	if err != nil {
-		log.Fatalf("windows service setup failed: %v", err)
+		slog.Error("windows service setup failed", "error", err)
+		return
 	}
 	if handled {
 		return
 	}
 
-	if err := runConsole(); err != nil {
-		log.Fatalf("server exited with error: %v", err)
+	if err := runConsole(cfg); err != nil {
+		slog.Error("server exited with error", "error", err)
 	}
 }
 
-func runConsole() error {
+func runConsole(cfg *config) error {
 	ctx, stop := signalNotifyContext(context.Background())
 	defer stop()
-	return runServer(ctx)
+	return runServer(ctx, cfg)
 }
 
-func runServer(ctx context.Context) error {
-	rdpHost := getEnv("RDP_HOST", "127.0.0.1")
-	rdpPort := getEnv("RDP_PORT", "3389")
-	httpPort := getEnv("HTTP_PORT", "8080")
-	maxSessions := getEnvInt("MAX_SESSIONS", 10)
-
+func runServer(ctx context.Context, cfg *config) error {
 	credRequests := make(chan broker.CredRequest)
 	sessionEvents := make(chan broker.SessionEvent, 128)
 	brokerEvents := make(chan broker.SessionEvent, 128)
@@ -76,16 +90,16 @@ func runServer(ctx context.Context) error {
 		Events:   brokerEvents,
 		Shutdown: shutdown,
 	}
-	manager := session.NewManager(maxSessions, managerEvents, shutdown)
+	manager := session.NewManager(cfg.maxSessions, managerEvents, shutdown)
 	handlers := &web.Handlers{
 		Manager:      manager,
 		CredRequests: credRequests,
 		SessionEvent: sessionEvents,
 		Shutdown:     shutdown,
 		Ctx:          ctx,
-		RDPAddr:      fmt.Sprintf("%s:%s", rdpHost, rdpPort),
+		RDPAddr:      fmt.Sprintf("%s:%s", cfg.rdpHost, cfg.rdpPort),
 	}
-	server := web.NewServer(":"+httpPort, handlers)
+	server := web.NewServer(":"+cfg.httpPort, handlers)
 
 	go credentialBroker.Run(ctx)
 	go manager.Run(ctx)
@@ -96,7 +110,7 @@ func runServer(ctx context.Context) error {
 		}
 	}()
 
-	log.Printf("rdp server listening on :%s", httpPort)
+	slog.Info("rdp server listening", "port", cfg.httpPort)
 
 	var runErr error
 	select {
@@ -108,23 +122,7 @@ func runServer(ctx context.Context) error {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("graceful shutdown failed: %v", err)
+		slog.Error("graceful shutdown failed", "error", err)
 	}
 	return runErr
-}
-
-func getEnv(key, fallback string) string {
-	if value, ok := os.LookupEnv(key); ok && value != "" {
-		return value
-	}
-	return fallback
-}
-
-func getEnvInt(key string, fallback int) int {
-	value := getEnv(key, strconv.Itoa(fallback))
-	parsed, err := strconv.Atoi(value)
-	if err != nil || parsed <= 0 {
-		return fallback
-	}
-	return parsed
 }

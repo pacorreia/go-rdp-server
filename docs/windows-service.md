@@ -8,10 +8,26 @@ Service name: `go-rdp-server`
 
 ## Install
 
+=== "Built-in flag (recommended)"
+
+    ```powershell
+    # Build the binary, then install it as a service in one step
+    go build -o rdpserver.exe ./cmd/rdpserver
+    .\rdpserver.exe -install-service
+    ```
+
+=== "Manual sc.exe"
+
+    ```powershell
+    go build -o rdpserver.exe ./cmd/rdpserver
+    sc.exe create go-rdp-server binPath= "C:\path\to\rdpserver.exe" start= auto
+    sc.exe description go-rdp-server "Browser-based RDP gateway service"
+    ```
+
+## Uninstall
+
 ```powershell
-go build -o rdpserver.exe ./cmd/rdpserver
-sc.exe create go-rdp-server binPath= "C:\path\to\rdpserver.exe" start= auto
-sc.exe description go-rdp-server "Browser-based RDP gateway service"
+.\rdpserver.exe -uninstall-service
 ```
 
 ## Operate
