@@ -61,16 +61,14 @@
       const overlay = document.getElementById('overlay');
       const status = document.getElementById('status');
 
-      function resizeCanvas() {
-        const dpr = window.devicePixelRatio || 1;
-        canvas.width = Math.floor(window.innerWidth * dpr);
-        canvas.height = Math.floor(window.innerHeight * dpr);
-        canvas.style.width = `${window.innerWidth}px`;
-        canvas.style.height = `${window.innerHeight}px`;
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      }
-      resizeCanvas();
-      window.addEventListener('resize', resizeCanvas);
+      // Fixed RDP session resolution - must match the server-side default.
+      const RDP_WIDTH = 1280;
+      const RDP_HEIGHT = 720;
+      // Set canvas backing store to the RDP session resolution so tile
+      // coordinates are always consistent. The CSS in the stylesheet scales
+      // the element to fill the viewport.
+      canvas.width = RDP_WIDTH;
+      canvas.height = RDP_HEIGHT;
 
       // ── PS/2 scancode table (KeyboardEvent.code → PS/2 make code) ────────────
       // Source: https://download.microsoft.com/download/1/6/1/161ba512-40e2-4cc9-843a-923143f3456c/translate.pdf
@@ -179,22 +177,35 @@
       });
 
       // ── Mouse ─────────────────────────────────────────────────────────────────
+      // Scale CSS-pixel offsets to the canvas backing-store coordinate space
+      // (1280×720) so that pointer positions match the RDP session resolution.
+      function rdpCoords(e) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+          x: Math.round(e.offsetX * canvas.width / rect.width),
+          y: Math.round(e.offsetY * canvas.height / rect.height),
+        };
+      }
       canvas.addEventListener('mousemove', (e) => {
-        send({ type: 'mousemove', x: e.offsetX, y: e.offsetY });
+        const { x, y } = rdpCoords(e);
+        send({ type: 'mousemove', x, y });
       });
       canvas.addEventListener('mousedown', (e) => {
         e.preventDefault();
-        send({ type: 'mousedown', button: e.button, x: e.offsetX, y: e.offsetY });
+        const { x, y } = rdpCoords(e);
+        send({ type: 'mousedown', button: e.button, x, y });
       });
       canvas.addEventListener('mouseup', (e) => {
-        send({ type: 'mouseup', button: e.button, x: e.offsetX, y: e.offsetY });
+        const { x, y } = rdpCoords(e);
+        send({ type: 'mouseup', button: e.button, x, y });
       });
       canvas.addEventListener('contextmenu', (e) => e.preventDefault());
       canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
+        const { x, y } = rdpCoords(e);
         // Browser deltaY: positive = scroll down. RDP convention: positive = scroll up.
         const delta = e.deltaY > 0 ? -1 : 1;
-        send({ type: 'mousewheel', delta, x: e.offsetX, y: e.offsetY });
+        send({ type: 'mousewheel', delta, x, y });
       }, { passive: false });
     </script>
   </body>
