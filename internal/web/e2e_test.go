@@ -1,8 +1,13 @@
 package web
 
 import (
-	"bufio"
+	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"net"
 	"net/http"
 	"os"
@@ -13,21 +18,53 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/pacorreia/go-rdp-server/internal/broker"
+	"github.com/pacorreia/go-rdp-server/internal/display"
 	"github.com/pacorreia/go-rdp-server/internal/session"
 )
 
+// fakeAccounts satisfies broker.Accounts without hitting the OS.
 type fakeAccounts struct{}
 
 func (fakeAccounts) CreateTempUser(username, password string) error { return nil }
 func (fakeAccounts) DeleteTempUser(username string) error           { return nil }
 func (fakeAccounts) AddToRDPGroup(username string) error            { return nil }
 
-func TestE2EWebsocketFlowWithGuacd(t *testing.T) {
+// fakeRDPSession is a mock display.RDPSession that sends a single tile then idles.
+type fakeRDPSession struct {
+	tiles chan display.Tile
+}
+
+func newFakeRDPSession(t *testing.T) *fakeRDPSession {
+	t.Helper()
+	// Build a tiny 4×4 red JPEG to send as a tile.
+	img := image.NewRGBA(image.Rect(0, 0, 4, 4))
+	for y := 0; y < 4; y++ {
+		for x := 0; x < 4; x++ {
+			img.SetRGBA(x, y, color.RGBA{R: 255, A: 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, nil); err != nil {
+		t.Fatalf("fakeRDPSession: jpeg encode: %v", err)
+	}
+
+	s := &fakeRDPSession{tiles: make(chan display.Tile, 1)}
+	s.tiles <- display.Tile{X: 0, Y: 0, W: 4, H: 4, Data: buf.Bytes()}
+	return s
+}
+
+func (f *fakeRDPSession) Tiles() <-chan display.Tile      { return f.tiles }
+func (f *fakeRDPSession) KeyDown(_ int)                  {}
+func (f *fakeRDPSession) KeyUp(_ int)                    {}
+func (f *fakeRDPSession) MouseMove(_, _ int)             {}
+func (f *fakeRDPSession) MouseDown(_, _, _ int)          {}
+func (f *fakeRDPSession) MouseUp(_, _, _ int)            {}
+func (f *fakeRDPSession) MouseWheel(_ int)               {}
+func (f *fakeRDPSession) Close()                         {}
+
+func TestE2EWebsocketFlow(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	guacdAddr, stopFakeGuacd := startFakeGuacd(t)
-	defer stopFakeGuacd()
 
 	credRequests := make(chan broker.CredRequest, 8)
 	sessionEvents := make(chan broker.SessionEvent, 16)
@@ -43,15 +80,19 @@ func TestE2EWebsocketFlowWithGuacd(t *testing.T) {
 		},
 	}
 	manager := session.NewManager(2, sessionEvents, shutdown)
+
+	fakeRDP := newFakeRDPSession(t)
 	handlers := &Handlers{
 		Manager:      manager,
 		CredRequests: credRequests,
 		SessionEvent: sessionEvents,
 		Shutdown:     shutdown,
 		Ctx:          ctx,
-		GuacdAddr:    guacdAddr,
-		RDPHost:      "127.0.0.1",
-		RDPPort:      "3389",
+		RDPAddr:      "127.0.0.1:3389",
+		// Inject the fake RDP session so no real RDP connection is needed.
+		RDPDial: func(_ context.Context, _, _, _, _ string, _, _ int) (display.RDPSession, error) {
+			return fakeRDP, nil
+		},
 	}
 
 	serverAddr := freeLocalAddress(t)
@@ -59,9 +100,7 @@ func TestE2EWebsocketFlowWithGuacd(t *testing.T) {
 
 	go brokerWorker.Run(ctx)
 	go manager.Run(ctx)
-	go func() {
-		_ = srv.Start()
-	}()
+	go func() { _ = srv.Start() }()
 	t.Cleanup(func() {
 		close(shutdown)
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -71,27 +110,42 @@ func TestE2EWebsocketFlowWithGuacd(t *testing.T) {
 
 	waitForHTTP(t, "http://"+serverAddr+"/")
 
-	u := "ws://" + serverAddr + "/ws/rdp"
 	dialer := websocket.Dialer{}
 	header := http.Header{}
 	header.Set("Origin", "http://"+serverAddr)
-	conn, _, err := dialer.Dial(u, header)
+	conn, _, err := dialer.Dial("ws://"+serverAddr+"/ws/rdp", header)
 	if err != nil {
 		t.Fatalf("websocket dial failed: %v", err)
 	}
 	defer conn.Close()
 
-	if err := conn.WriteMessage(websocket.TextMessage, []byte("4.sync,1.2;")); err != nil {
-		t.Fatalf("write websocket message failed: %v", err)
-	}
-
-	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	// The fake RDP session immediately emits one tile; we expect to receive it
+	// as a JSON tile message on the WebSocket.
+	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
 	_, payload, err := conn.ReadMessage()
 	if err != nil {
 		t.Fatalf("read websocket message failed: %v", err)
 	}
-	if !strings.Contains(string(payload), "sync") {
-		t.Fatalf("expected sync instruction from guacd, got %q", string(payload))
+
+	var msg struct {
+		Type string `json:"type"`
+		X    int    `json:"x"`
+		Y    int    `json:"y"`
+		W    int    `json:"w"`
+		H    int    `json:"h"`
+		Data string `json:"data"`
+	}
+	if err := json.Unmarshal(payload, &msg); err != nil {
+		t.Fatalf("unmarshal tile message: %v", err)
+	}
+	if msg.Type != "tile" {
+		t.Fatalf("expected type=tile, got %q", msg.Type)
+	}
+	if msg.W != 4 || msg.H != 4 {
+		t.Fatalf("expected 4×4 tile, got %d×%d", msg.W, msg.H)
+	}
+	if _, err := base64.StdEncoding.DecodeString(msg.Data); err != nil {
+		t.Fatalf("tile data is not valid base64: %v", err)
 	}
 }
 
@@ -122,50 +176,6 @@ func TestE2ENativeRDPClient(t *testing.T) {
 		return
 	}
 	t.Fatalf("native RDP client failed: %v (%s)", err, output)
-}
-
-func startFakeGuacd(t *testing.T) (string, func()) {
-	t.Helper()
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("failed to start fake guacd listener: %v", err)
-	}
-
-	stop := make(chan struct{})
-	go func() {
-		for {
-			conn, err := listener.Accept()
-			if err != nil {
-				select {
-				case <-stop:
-					return
-				default:
-					return
-				}
-			}
-			go handleFakeGuacdConn(conn)
-		}
-	}()
-
-	return listener.Addr().String(), func() {
-		close(stop)
-		_ = listener.Close()
-	}
-}
-
-func handleFakeGuacdConn(conn net.Conn) {
-	defer conn.Close()
-	reader := bufio.NewReader(conn)
-	for {
-		line, err := reader.ReadString(';')
-		if err != nil {
-			return
-		}
-		if strings.Contains(line, "connect") {
-			_, _ = conn.Write([]byte("4.sync,1.1;"))
-			return
-		}
-	}
 }
 
 func waitForHTTP(t *testing.T, address string) {

@@ -2,44 +2,59 @@ package session
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/pacorreia/go-rdp-server/internal/broker"
-	"github.com/pacorreia/go-rdp-server/internal/guacd"
+	"github.com/pacorreia/go-rdp-server/internal/display"
 )
 
 const websocketWriteTimeout = 30 * time.Second
 
-type guacdClient interface {
-	SendChan() chan<- *guacd.Instruction
-	RecvChan() <-chan *guacd.Instruction
+// RDPDialFunc is the signature used by Session to open an RDP connection.
+// addr is "host:port"; domain may be empty for local accounts.
+// Provide a custom implementation in tests to inject a fake RDPSession.
+type RDPDialFunc func(ctx context.Context, addr, domain, username, password string, width, height int) (display.RDPSession, error)
+
+// serverTile is the JSON message sent from server to browser for each tile update.
+type serverTile struct {
+	Type string `json:"type"` // always "tile"
+	X    int    `json:"x"`
+	Y    int    `json:"y"`
+	W    int    `json:"w"`
+	H    int    `json:"h"`
+	Data string `json:"data"` // base64-encoded JPEG bytes
 }
 
-type defaultGuacdClient struct {
-	client *guacd.Client
+// clientMsg is the JSON message received from the browser.
+type clientMsg struct {
+	Type     string `json:"type"`               // "keydown"|"keyup"|"mousemove"|"mousedown"|"mouseup"|"mousewheel"
+	Scancode int    `json:"scancode,omitempty"` // PS/2 scancode for key events
+	Button   int    `json:"button,omitempty"`   // 0=left,1=middle,2=right for mouse button events
+	X        int    `json:"x,omitempty"`
+	Y        int    `json:"y,omitempty"`
+	Delta    int    `json:"delta,omitempty"` // scroll notches (positive=up, negative=down)
 }
 
-func (c defaultGuacdClient) SendChan() chan<- *guacd.Instruction { return c.client.Send }
-func (c defaultGuacdClient) RecvChan() <-chan *guacd.Instruction { return c.client.Recv }
-
-// Session is a worker goroutine handling one websocket ↔ guacd tunnel.
+// Session is a worker goroutine handling one WebSocket ↔ RDP tunnel.
 type Session struct {
 	ID string
 
 	Conn *websocket.Conn
 
-	GuacdAddr string
-	RDPHost   string
-	RDPPort   string
+	// RDPAddr is the "host:port" of the Windows machine running RDP.
+	RDPAddr string
 
 	CredRequests chan<- broker.CredRequest
 	Events       chan<- broker.SessionEvent
 	Shutdown     <-chan struct{}
 
-	GuacdDial func(ctx context.Context, addr string) (guacdClient, error)
+	// RDPDial, when non-nil, overrides the default display.Connect call.
+	// Used in tests to inject a fake RDPSession.
+	RDPDial RDPDialFunc
 }
 
 func (s *Session) Run(ctx context.Context) {
@@ -59,18 +74,18 @@ func (s *Session) Run(ctx context.Context) {
 		return
 	}
 
-	client, err := s.newGuacdClient(ctx)
+	rdp, err := s.dialRDP(ctx, cred)
 	if err != nil {
-		s.Events <- broker.SessionEvent{SessionID: s.ID, Type: broker.SessionError, Err: err}
+		s.Events <- broker.SessionEvent{SessionID: s.ID, Type: broker.SessionError, Err: fmt.Errorf("rdp connect: %w", err)}
 		return
 	}
-	s.sendConnectHandshake(client.SendChan(), cred)
+	defer rdp.Close()
 
-	wsToGuacd := s.startWebSocketReader(ctx)
-	guacdToWS := s.startGuacdReader(ctx, client.RecvChan())
-	s.proxyLoop(ctx, client.SendChan(), wsToGuacd, guacdToWS)
+	inputDone := s.startInputReader(ctx, rdp)
+	s.tileLoop(ctx, rdp, inputDone)
 }
 
+// requestCredentials asks the broker for temporary Windows credentials.
 func (s *Session) requestCredentials(ctx context.Context) (broker.CredResponse, bool) {
 	responseCh := make(chan broker.CredResponse, 1)
 	select {
@@ -80,7 +95,6 @@ func (s *Session) requestCredentials(ctx context.Context) (broker.CredResponse, 
 	case <-s.Shutdown:
 		return broker.CredResponse{}, false
 	}
-
 	select {
 	case <-ctx.Done():
 		return broker.CredResponse{}, false
@@ -91,97 +105,98 @@ func (s *Session) requestCredentials(ctx context.Context) (broker.CredResponse, 
 	}
 }
 
-func (s *Session) newGuacdClient(ctx context.Context) (guacdClient, error) {
-	if s.GuacdDial != nil {
-		return s.GuacdDial(ctx, s.GuacdAddr)
+// dialRDP opens an RDP session using either RDPDial (test hook) or display.Connect.
+func (s *Session) dialRDP(ctx context.Context, cred broker.CredResponse) (display.RDPSession, error) {
+	// Default resolution matches a common 16:9 layout.
+	// The browser UI canvas backing store is set to the same dimensions so that
+	// tile coordinates and mouse offsets are always consistent.
+	const (
+		defaultWidth  = 1280
+		defaultHeight = 720
+	)
+	if s.RDPDial != nil {
+		return s.RDPDial(ctx, s.RDPAddr, "", cred.Username, cred.Password, defaultWidth, defaultHeight)
 	}
-	client, err := guacd.NewClient(ctx, s.GuacdAddr)
-	if err != nil {
-		return nil, err
-	}
-	return defaultGuacdClient{client: client}, nil
+	return display.Connect(s.RDPAddr, "", cred.Username, cred.Password, defaultWidth, defaultHeight)
 }
 
-func (s *Session) sendConnectHandshake(out chan<- *guacd.Instruction, cred broker.CredResponse) {
-	out <- &guacd.Instruction{Opcode: "select", Args: []string{"rdp"}}
-	out <- &guacd.Instruction{Opcode: "size", Args: []string{"1920", "1080", "96"}}
-	out <- &guacd.Instruction{Opcode: "connect", Args: []string{
-		"hostname", s.RDPHost,
-		"port", s.RDPPort,
-		"username", cred.Username,
-		"password", cred.Password,
-	}}
-}
-
-func (s *Session) startWebSocketReader(ctx context.Context) <-chan *guacd.Instruction {
-	out := make(chan *guacd.Instruction, 64)
+// startInputReader reads JSON input events from the WebSocket connection and
+// forwards them to the RDP session. It returns a channel that is closed when
+// the WebSocket read loop exits.
+func (s *Session) startInputReader(ctx context.Context, rdp display.RDPSession) <-chan struct{} {
+	done := make(chan struct{})
 	go func() {
-		defer close(out)
+		defer close(done)
 		for {
-			_, message, err := s.Conn.ReadMessage()
+			_, raw, err := s.Conn.ReadMessage()
 			if err != nil {
 				return
 			}
-			instructions, err := guacd.DecodeAll(strings.TrimSpace(string(message)))
-			if err != nil {
+			var msg clientMsg
+			if err := json.Unmarshal(raw, &msg); err != nil {
 				continue
 			}
-			for _, instruction := range instructions {
-				select {
-				case <-ctx.Done():
-					return
-				case <-s.Shutdown:
-					return
-				case out <- instruction:
-				}
-			}
-		}
-	}()
-	return out
-}
-
-func (s *Session) startGuacdReader(ctx context.Context, input <-chan *guacd.Instruction) <-chan []byte {
-	out := make(chan []byte, 64)
-	go func() {
-		defer close(out)
-		for instruction := range input {
 			select {
 			case <-ctx.Done():
 				return
 			case <-s.Shutdown:
 				return
-			case out <- []byte(instruction.Encode()):
+			default:
+			}
+			switch msg.Type {
+			case "keydown":
+				rdp.KeyDown(msg.Scancode)
+			case "keyup":
+				rdp.KeyUp(msg.Scancode)
+			case "mousemove":
+				rdp.MouseMove(msg.X, msg.Y)
+			case "mousedown":
+				rdp.MouseDown(msg.Button, msg.X, msg.Y)
+			case "mouseup":
+				rdp.MouseUp(msg.Button, msg.X, msg.Y)
+			case "mousewheel":
+				rdp.MouseWheel(msg.Delta)
 			}
 		}
 	}()
-	return out
+	return done
 }
 
-func (s *Session) proxyLoop(ctx context.Context, guacdSend chan<- *guacd.Instruction, wsToGuacd <-chan *guacd.Instruction, guacdToWS <-chan []byte) {
+// tileLoop reads tile updates from the RDP session and writes them as JSON to
+// the WebSocket connection. It exits when the context is cancelled, the
+// shutdown signal fires, the RDP tile channel closes, or the input reader exits.
+func (s *Session) tileLoop(ctx context.Context, rdp display.RDPSession, inputDone <-chan struct{}) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-s.Shutdown:
 			return
-		case instruction, ok := <-wsToGuacd:
+		case <-inputDone:
+			return
+		case tile, ok := <-rdp.Tiles():
 			if !ok {
 				return
 			}
-			select {
-			case <-ctx.Done():
-				return
-			case <-s.Shutdown:
-				return
-			case guacdSend <- instruction:
+			msg := serverTile{
+				Type: "tile",
+				X:    tile.X,
+				Y:    tile.Y,
+				W:    tile.W,
+				H:    tile.H,
+				Data: base64.StdEncoding.EncodeToString(tile.Data),
 			}
-		case payload, ok := <-guacdToWS:
-			if !ok {
-				return
+			payload, err := json.Marshal(msg)
+			if err != nil {
+				continue
 			}
 			_ = s.Conn.SetWriteDeadline(time.Now().Add(websocketWriteTimeout))
 			if err := s.Conn.WriteMessage(websocket.TextMessage, payload); err != nil {
-				s.Events <- broker.SessionEvent{SessionID: s.ID, Type: broker.SessionError, Err: fmt.Errorf("websocket write failed: %w", err)}
+				s.Events <- broker.SessionEvent{
+					SessionID: s.ID,
+					Type:      broker.SessionError,
+					Err:       fmt.Errorf("websocket write failed: %w", err),
+				}
 				return
 			}
 		}
