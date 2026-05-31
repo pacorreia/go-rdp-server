@@ -269,8 +269,10 @@
       connectingMsg.style.display = '';
 
       fetch('/api/config')
-        .then(r => r.json())
-        .catch(() => ({ perUserLogin: false }))
+        .then(r => {
+          if (!r.ok) throw new Error(`config request failed (${r.status})`);
+          return r.json();
+        })
         .then(cfg => {
           if (cfg.perUserLogin) {
             // Show login form; WS will be opened on form submit.
@@ -289,6 +291,11 @@
             // Non-per-user mode: connect immediately (existing behaviour).
             openWebSocket(null);
           }
+        })
+        .catch(() => {
+          connectingMsg.style.display = 'none';
+          status.textContent = 'Unable to load server configuration';
+          showOverlay(false);
         });
 
       function submitLogin() {
