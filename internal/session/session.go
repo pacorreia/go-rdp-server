@@ -107,7 +107,7 @@ func (s *Session) requestCredentials(ctx context.Context) (broker.CredResponse, 
 
 // dialRDP opens an RDP session using either RDPDial (test hook) or display.Connect.
 func (s *Session) dialRDP(ctx context.Context, cred broker.CredResponse) (display.RDPSession, error) {
-	// Default resolution matches a common 16:9 layout; the browser will resize via input.
+	// Default resolution matches a common 16:9 layout; currently fixed for the session.
 	const (
 		defaultWidth  = 1280
 		defaultHeight = 720
