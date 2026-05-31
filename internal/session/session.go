@@ -107,7 +107,14 @@ func (s *Session) Run(ctx context.Context) {
 	}()
 
 	var cred broker.CredResponse
-	if s.PerUserLogin {
+	if s.StaticUsername != "" {
+		var ok bool
+		cred, ok = s.requestCredentials(ctx)
+		if !ok {
+			s.writeCloseMsg(websocket.CloseGoingAway, "server shutting down")
+			return
+		}
+	} else if s.PerUserLogin {
 		username, password, ok := s.readAuth(ctx)
 		if !ok {
 			return
