@@ -6,7 +6,7 @@ title: Home
 
 [![Build](https://github.com/pacorreia/go-rdp-server/actions/workflows/build.yml/badge.svg)](https://github.com/pacorreia/go-rdp-server/actions/workflows/build.yml)
 [![Latest Release](https://img.shields.io/github/v/release/pacorreia/go-rdp-server?sort=semver)](https://github.com/pacorreia/go-rdp-server/releases)
-[![Go Version](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go)](https://go.dev/)
 
 A lightweight, browser-based RDP gateway that brokers temporary Windows credentials and connects directly to RDP using a pure-Go client — no external dependencies required.
 
@@ -60,7 +60,7 @@ flowchart TD
 ### Prerequisites
 
 - A Windows host with RDP enabled
-- Go 1.24+ (for building from source)
+- Go 1.26+ (for building from source)
 
 ### Installation
 
