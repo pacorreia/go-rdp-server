@@ -414,7 +414,7 @@ func (n *NTLMv2) GetAuthenticateMessage(s []byte) (*AuthenticateMessage, *NTLMv2
 	exportedSessionKey := core.Random(16)
 	EncryptedRandomSessionKey := make([]byte, len(exportedSessionKey))
 	rc, _ := rc4.NewCipher(exchangeKey)
-	rc.XORKeyStream(EncryptedRandomSessionKey, exportedSessionKey) // lgtm[go/weak-cryptographic-algorithm]
+	rc.XORKeyStream(EncryptedRandomSessionKey, exportedSessionKey) // codeql[go/weak-cryptographic-algorithm]
 
 	if challengeMsg.NegotiateFlags&NTLMSSP_NEGOTIATE_UNICODE != 0 {
 		n.enableUnicode = true
@@ -480,7 +480,7 @@ type NTLMv2Security struct {
 
 func (n *NTLMv2Security) GssEncrypt(s []byte) []byte {
 	p := make([]byte, len(s))
-	n.EncryptRC4.XORKeyStream(p, s) // lgtm[go/weak-cryptographic-algorithm]
+	n.EncryptRC4.XORKeyStream(p, s) // codeql[go/weak-cryptographic-algorithm]
 
 	// HMAC input: SeqNum(4) + plaintext.
 	// Use append instead of make([]byte, 4+len(s)) to avoid integer overflow in
@@ -490,7 +490,7 @@ func (n *NTLMv2Security) GssEncrypt(s []byte) []byte {
 	s1 := HMAC_MD5(n.SigningKey, sigInput)[:8]
 
 	checksum := make([]byte, 8)
-	n.EncryptRC4.XORKeyStream(checksum, s1) // lgtm[go/weak-cryptographic-algorithm]
+	n.EncryptRC4.XORKeyStream(checksum, s1) // codeql[go/weak-cryptographic-algorithm]
 
 	// Output: version(4) + checksum(8) + SeqNum(4) + encrypted(len(p))
 	out := make([]byte, 16+len(p))
@@ -513,10 +513,10 @@ func (n *NTLMv2Security) GssDecrypt(s []byte) []byte {
 	data := s[16:]
 
 	p := make([]byte, len(data))
-	n.DecryptRC4.XORKeyStream(p, data) // lgtm[go/weak-cryptographic-algorithm]
+	n.DecryptRC4.XORKeyStream(p, data) // codeql[go/weak-cryptographic-algorithm]
 
 	check := make([]byte, 8)
-	n.DecryptRC4.XORKeyStream(check, checksum) // lgtm[go/weak-cryptographic-algorithm]
+	n.DecryptRC4.XORKeyStream(check, checksum) // codeql[go/weak-cryptographic-algorithm]
 
 	// HMAC input: seqNum(4) + decrypted(len(p)).
 	// Use append instead of make([]byte, 4+len(p)) to avoid integer overflow in

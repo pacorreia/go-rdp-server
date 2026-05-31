@@ -82,7 +82,7 @@ func (s *SocketLayer) StartTLS() error {
 		// certificate; the TLS handshake itself ensures the server owns the
 		// corresponding private key, and RDP NLA further authenticates the server
 		// via CredSSP for connections that use Network Level Authentication.
-		InsecureSkipVerify: true, // lgtm[go/disabled-certificate-check]
+		InsecureSkipVerify: true, // codeql[go/disabled-certificate-check]
 		VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 			if len(rawCerts) == 0 {
 				return errors.New("rdp: server presented no certificate")

@@ -366,7 +366,7 @@ func macData(macSaltKey, data []byte) []byte {
 	sha1Digest.Write(macSaltKey)
 	sha1Digest.Write(macPad36[:])
 	sha1Digest.Write(lenBuf[:])
-	sha1Digest.Write(data) // lgtm[go/weak-sensitive-data-hashing]
+	sha1Digest.Write(data) // codeql[go/weak-sensitive-data-hashing]
 
 	sha1Sig := sha1Digest.Sum(nil)
 
@@ -385,7 +385,7 @@ func (s *SEC) readEncryptedPayload(data []byte, checkSum bool) []byte {
 	}
 	s.nbDecryptedPacket++
 	plaintext := make([]byte, len(encryptedPayload))
-	s.decryptRc4.XORKeyStream(plaintext, encryptedPayload) // lgtm[go/weak-cryptographic-algorithm]
+	s.decryptRc4.XORKeyStream(plaintext, encryptedPayload) // codeql[go/weak-cryptographic-algorithm]
 
 	return plaintext
 }
@@ -404,7 +404,7 @@ func (s *SEC) writeEncryptedPayload(data []byte, checkSum bool) []byte {
 
 	result := make([]byte, 8+len(data))
 	copy(result[:8], sign)
-	s.encryptRc4.XORKeyStream(result[8:], data) // lgtm[go/weak-cryptographic-algorithm]
+	s.encryptRc4.XORKeyStream(result[8:], data) // codeql[go/weak-cryptographic-algorithm]
 	slog.Debug("writeEncryptedPayload", "sign", core.Hex(sign), "plaintext", core.Hex(result[8:]))
 	return result
 }
@@ -583,12 +583,12 @@ func saltedHash(inputData, salt, salt1, salt2 []byte) []byte {
 	md5Digest := md5.New()
 
 	sha1Digest.Write(inputData)
-	sha1Digest.Write(salt[:48]) // lgtm[go/weak-sensitive-data-hashing]
+	sha1Digest.Write(salt[:48]) // codeql[go/weak-sensitive-data-hashing]
 	sha1Digest.Write(salt1)
 	sha1Digest.Write(salt2)
 	sha1Sig := sha1Digest.Sum(nil)
 
-	md5Digest.Write(salt[:48]) // lgtm[go/weak-sensitive-data-hashing]
+	md5Digest.Write(salt[:48]) // codeql[go/weak-sensitive-data-hashing]
 	md5Digest.Write(sha1Sig)
 
 	return md5Digest.Sum(nil)[:16]
@@ -603,7 +603,7 @@ func saltedHash(inputData, salt, salt1, salt2 []byte) []byte {
 */
 func finalHash(key, random1, random2 []byte) []byte {
 	md5Digest := md5.New()
-	md5Digest.Write(key) // lgtm[go/weak-sensitive-data-hashing]
+	md5Digest.Write(key) // codeql[go/weak-sensitive-data-hashing]
 	md5Digest.Write(random1)
 	md5Digest.Write(random2)
 	return md5Digest.Sum(nil)
@@ -847,7 +847,7 @@ func (c *Client) sendClientChallengeResponse(data []byte) {
 	//it should be TEST word in unicode format
 	rc, _ := rc4.NewCipher(c.initialDecrytKey)
 	serverChallenge := make([]byte, 20)
-	rc.XORKeyStream(serverChallenge, serverEncryptedChallenge) // lgtm[go/weak-cryptographic-algorithm]
+	rc.XORKeyStream(serverChallenge, serverEncryptedChallenge) // codeql[go/weak-cryptographic-algorithm]
 	//if serverChallenge != "T\x00E\x00S\x00T\x00\x00\x00":
 	//raise InvalidExpectedDataException("bad license server challenge")
 
@@ -861,7 +861,7 @@ func (c *Client) sendClientChallengeResponse(data []byte) {
 	hwid := b.Bytes()[:20]
 
 	encryptedHWID := make([]byte, 20)
-	rc.XORKeyStream(encryptedHWID, hwid) // lgtm[go/weak-cryptographic-algorithm]
+	rc.XORKeyStream(encryptedHWID, hwid) // codeql[go/weak-cryptographic-algorithm]
 
 	b.Reset()
 	b.Write(serverChallenge)
