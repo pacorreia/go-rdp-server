@@ -130,7 +130,7 @@ func (h *Handlers) HandleConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(clientConfig{PerUserLogin: h.PerUserLogin})
+	_ = json.NewEncoder(w).Encode(clientConfig{PerUserLogin: h.PerUserLogin && h.StaticRDPUsername == ""})
 }
 
 func (h *Handlers) HandleRDPWebSocket(w http.ResponseWriter, r *http.Request) {
