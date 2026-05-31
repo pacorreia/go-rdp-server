@@ -61,7 +61,7 @@ flowchart TD
 ### Prerequisites
 
 - A Windows host with RDP enabled and `guacd` reachable
-- Go 1.24+ (for building from source)
+- Go 1.23+ (for building from source)
 
 ### Installation
 
