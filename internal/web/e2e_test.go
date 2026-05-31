@@ -161,6 +161,11 @@ func handleFakeGuacdConn(conn net.Conn) {
 		if err != nil {
 			return
 		}
+		if strings.Contains(line, "select") {
+			// Respond with the args the fake guacd supports.
+			_, _ = conn.Write([]byte("4.args,8.hostname,4.port,8.username,8.password;"))
+			continue
+		}
 		if strings.Contains(line, "connect") {
 			_, _ = conn.Write([]byte("4.sync,1.1;"))
 			return

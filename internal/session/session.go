@@ -25,6 +25,11 @@ type defaultGuacdClient struct {
 func (c defaultGuacdClient) SendChan() chan<- *guacd.Instruction { return c.client.Send }
 func (c defaultGuacdClient) RecvChan() <-chan *guacd.Instruction { return c.client.Recv }
 
+// GuacdDial is the signature used by tests to inject a fake guacd client.
+// addr is the guacd TCP address; host/port/username/password are the RDP
+// connection parameters that the real implementation passes to NewClient.
+type GuacdDialFunc func(ctx context.Context, addr, host, port, username, password string) (guacdClient, error)
+
 // Session is a worker goroutine handling one websocket ↔ guacd tunnel.
 type Session struct {
 	ID string
@@ -39,7 +44,7 @@ type Session struct {
 	Events       chan<- broker.SessionEvent
 	Shutdown     <-chan struct{}
 
-	GuacdDial func(ctx context.Context, addr string) (guacdClient, error)
+	GuacdDial GuacdDialFunc
 }
 
 func (s *Session) Run(ctx context.Context) {
@@ -59,12 +64,11 @@ func (s *Session) Run(ctx context.Context) {
 		return
 	}
 
-	client, err := s.newGuacdClient(ctx)
+	client, err := s.newGuacdClient(ctx, cred)
 	if err != nil {
 		s.Events <- broker.SessionEvent{SessionID: s.ID, Type: broker.SessionError, Err: err}
 		return
 	}
-	s.sendConnectHandshake(client.SendChan(), cred)
 
 	wsToGuacd := s.startWebSocketReader(ctx)
 	guacdToWS := s.startGuacdReader(ctx, client.RecvChan())
@@ -91,26 +95,15 @@ func (s *Session) requestCredentials(ctx context.Context) (broker.CredResponse, 
 	}
 }
 
-func (s *Session) newGuacdClient(ctx context.Context) (guacdClient, error) {
+func (s *Session) newGuacdClient(ctx context.Context, cred broker.CredResponse) (guacdClient, error) {
 	if s.GuacdDial != nil {
-		return s.GuacdDial(ctx, s.GuacdAddr)
+		return s.GuacdDial(ctx, s.GuacdAddr, s.RDPHost, s.RDPPort, cred.Username, cred.Password)
 	}
-	client, err := guacd.NewClient(ctx, s.GuacdAddr)
+	client, err := guacd.NewClient(ctx, s.GuacdAddr, s.RDPHost, s.RDPPort, cred.Username, cred.Password)
 	if err != nil {
 		return nil, err
 	}
 	return defaultGuacdClient{client: client}, nil
-}
-
-func (s *Session) sendConnectHandshake(out chan<- *guacd.Instruction, cred broker.CredResponse) {
-	out <- &guacd.Instruction{Opcode: "select", Args: []string{"rdp"}}
-	out <- &guacd.Instruction{Opcode: "size", Args: []string{"1920", "1080", "96"}}
-	out <- &guacd.Instruction{Opcode: "connect", Args: []string{
-		"hostname", s.RDPHost,
-		"port", s.RDPPort,
-		"username", cred.Username,
-		"password", cred.Password,
-	}}
 }
 
 func (s *Session) startWebSocketReader(ctx context.Context) <-chan *guacd.Instruction {
