@@ -2,16 +2,31 @@ name: release
 
 on:
   push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
+    branches:
+      - main
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - name: Run Release Please
+        uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
   build:
     runs-on: ubuntu-latest
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
     strategy:
       matrix:
         include:
@@ -64,23 +79,25 @@ jobs:
           fi
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/rdpserver-${{ matrix.goos }}-${{ matrix.goarch }}.${{ matrix.archive }}
 
   publish:
     runs-on: ubuntu-latest
-    needs: build
+    needs: [release-please, build]
+    if: ${{ needs.release-please.outputs.release_created }}
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v4
         with:
           path: dist
           pattern: release-*
           merge-multiple: true
 
-      - name: Publish release
-        uses: softprops/action-gh-release@v3
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.release-please.outputs.tag_name }}
           files: dist/*
