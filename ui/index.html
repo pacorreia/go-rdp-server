@@ -131,15 +131,20 @@
         if (msg.type !== 'tile') return;
 
         const img = new Image();
+        let url = '';
         img.onload = () => {
           ctx.drawImage(img, msg.x, msg.y);
-          URL.revokeObjectURL(img.src);
+          if (url) URL.revokeObjectURL(url);
         };
+        img.onerror = () => { if (url) URL.revokeObjectURL(url); };
+
         // Decode base64 JPEG and create an object URL for fast drawImage.
-        const binary = atob(msg.data);
+        let binary;
+        try { binary = atob(msg.data); } catch { return; }
         const bytes = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        img.src = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
+        url = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
+        img.src = url;
       });
 
       function send(msg) {
