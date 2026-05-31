@@ -78,6 +78,8 @@ func handshake(conn net.Conn, reader *bufio.Reader, host, port, username, passwo
 	}
 
 	// 3. Send tunnel capability negotiation instructions.
+	// Empty Args for audio/video/image signal that the client declares no
+	// specific MIME-type preferences; guacd picks suitable defaults.
 	for _, instr := range []*Instruction{
 		{Opcode: "size", Args: []string{"1920", "1080", "96"}},
 		{Opcode: "audio"},
@@ -90,6 +92,10 @@ func handshake(conn net.Conn, reader *bufio.Reader, host, port, username, passwo
 	}
 
 	// 4. Connect with positional values that match guacd's args order.
+	// guacd lists every parameter it accepts; we supply values for the ones
+	// we know and leave the rest as empty strings (guacd treats them as
+	// defaults). Parameters such as hostname, port, username, and password
+	// are required; all others are optional.
 	known := map[string]string{
 		"hostname": host,
 		"port":     port,
