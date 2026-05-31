@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+      <url>
+        <loc>https://pacorreia.github.io/go-rdp-server/</loc>
+      </url>
+      <url>
+        <loc>https://pacorreia.github.io/go-rdp-server/architecture/</loc>
+      </url>
+      <url>
+        <loc>https://pacorreia.github.io/go-rdp-server/configuration/</loc>
+      </url>
+      <url>
+        <loc>https://pacorreia.github.io/go-rdp-server/windows-service/</loc>
+      </url>
+      <url>
+        <loc>https://pacorreia.github.io/go-rdp-server/development/</loc>
+      </url>
+      <url>
+        <loc>https://pacorreia.github.io/go-rdp-server/zensical/</loc>
+      </url>
+</urlset>
