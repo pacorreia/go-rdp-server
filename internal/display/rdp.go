@@ -44,12 +44,8 @@ func Connect(addr, domain, username, password string, width, height int) (RDPSes
 				H:    b.Height,
 				Data: buf.Bytes(),
 			}
-			select {
-			case s.tiles <- tile:
-			case <-s.done:
+			if s.sendTile(tile) {
 				return
-			default:
-				// Drop tile when buffer is full to avoid blocking the RDP stream.
 			}
 		}
 	})
@@ -68,13 +64,36 @@ type rdpSession struct {
 	c         *grdp.RdpClient
 	tiles     chan Tile
 	done      chan struct{}
+	mu        sync.Mutex // guards closed and sends into tiles
+	closed    bool
 	closeOnce sync.Once
+}
+
+// sendTile delivers a tile to the consumer. It returns true when the session
+// is done and the caller should stop sending.
+func (s *rdpSession) sendTile(tile Tile) (done bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return true
+	}
+	select {
+	case s.tiles <- tile:
+	case <-s.done:
+		return true
+	default:
+		// Drop tile when buffer is full to avoid blocking the RDP stream.
+	}
+	return false
 }
 
 func (s *rdpSession) closeDone() {
 	s.closeOnce.Do(func() {
 		close(s.done)
+		s.mu.Lock()
+		s.closed = true
 		close(s.tiles)
+		s.mu.Unlock()
 	})
 }
 
