@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.1.0](https://github.com/pacorreia/go-rdp-server/compare/v1.0.1...v1.1.0) (2026-05-31)
+
+
+### Features
+
+* add CLI flags, log-level, and service install/uninstall ([e1de410](https://github.com/pacorreia/go-rdp-server/commit/e1de4108cc5e1a58a4fb46a1f016743bbb7da491))
+* replace guacd with pure-Go RDP client (nakagami/grdp) and canvas UI ([1fbc346](https://github.com/pacorreia/go-rdp-server/commit/1fbc346df1841f4b82a2185f0b984ce7096d6d7c))
+
+
+### Bug Fixes
+
+* address code review feedback on MouseWheel interface and wheel comment ([e6c83d4](https://github.com/pacorreia/go-rdp-server/commit/e6c83d4af6875d8dc55ee92c48e5ff6e2b99db97))
+* align canvas to RDP resolution and guarantee tiles channel closure ([583edd9](https://github.com/pacorreia/go-rdp-server/commit/583edd97e07f0c3baf477bbf3964edef3b145a02))
+* close tiles channel in closeDone to unblock tileLoop on disconnect ([1e41c2d](https://github.com/pacorreia/go-rdp-server/commit/1e41c2d47bc437e68321f33f569ff09cebb18390))
+* close tiles channel on RDP disconnect to unblock tileLoop ([9842960](https://github.com/pacorreia/go-rdp-server/commit/9842960b266c7f48f056052f7849c3abd2cb9460))
+* move close(s.done) inside mutex lock for atomic state transition ([34b54cc](https://github.com/pacorreia/go-rdp-server/commit/34b54cc474195ed67327e862f3ce3b7d8b9ba81d))
+* protect tile sends with mutex to prevent send-on-closed-channel race ([1cce430](https://github.com/pacorreia/go-rdp-server/commit/1cce43095b0d742200ca984eb277114441c3c8ba))
+
 ## [1.0.1](https://github.com/pacorreia/go-rdp-server/compare/v1.0.0...v1.0.1) (2026-05-31)
 
 
