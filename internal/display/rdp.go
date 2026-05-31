@@ -103,7 +103,7 @@ func (s *rdpSession) KeyUp(sc int)         { s.c.KeyUp(sc) }
 func (s *rdpSession) MouseMove(x, y int)   { s.c.MouseMove(x, y) }
 func (s *rdpSession) MouseDown(b, x, y int) { s.c.MouseDown(b, x, y) }
 func (s *rdpSession) MouseUp(b, x, y int)  { s.c.MouseUp(b, x, y) }
-func (s *rdpSession) MouseWheel(d int)  { s.c.MouseWheel(d) }
+func (s *rdpSession) MouseWheel(d int)  { s.c.MouseWheel(float64(d)) }
 func (s *rdpSession) Close() {
 	s.c.Close()
 	s.closeDone() // guarantee tiles is closed even if OnClose is never called

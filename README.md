@@ -24,7 +24,7 @@ Current implementation is production-oriented and includes:
 ## Prerequisites
 
 - Windows host with Remote Desktop enabled
-- Go 1.24+
+- Go 1.26+
 
 ## Configuration
 
