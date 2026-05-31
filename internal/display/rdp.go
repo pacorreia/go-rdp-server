@@ -72,7 +72,10 @@ type rdpSession struct {
 }
 
 func (s *rdpSession) closeDone() {
-	s.closeOnce.Do(func() { close(s.done) })
+	s.closeOnce.Do(func() {
+		close(s.done)
+		close(s.tiles)
+	})
 }
 
 func (s *rdpSession) Tiles() <-chan Tile    { return s.tiles }
