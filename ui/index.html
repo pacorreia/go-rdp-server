@@ -120,7 +120,8 @@
       });
       ws.addEventListener('close', (e) => {
         overlay.style.display = 'flex';
-        status.textContent = `Disconnected (${e.code})`;
+        const reason = e.reason ? ` — ${e.reason}` : '';
+        status.textContent = `Disconnected (${e.code})${reason}`;
       });
       ws.addEventListener('error', () => {
         overlay.style.display = 'flex';

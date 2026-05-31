@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -12,7 +13,10 @@ import (
 	"github.com/pacorreia/go-rdp-server/internal/display"
 )
 
-const websocketWriteTimeout = 30 * time.Second
+const (
+	websocketWriteTimeout = 30 * time.Second
+	websocketCloseTimeout = time.Second
+)
 
 // RDPDialFunc is the signature used by Session to open an RDP connection.
 // addr is "host:port"; domain may be empty for local accounts.
@@ -48,6 +52,11 @@ type Session struct {
 	// RDPAddr is the "host:port" of the Windows machine running RDP.
 	RDPAddr string
 
+	// StaticUsername and StaticPassword, when non-empty, are used directly as
+	// RDP credentials without contacting the broker.
+	StaticUsername string
+	StaticPassword string
+
 	CredRequests chan<- broker.CredRequest
 	Events       chan<- broker.SessionEvent
 	Shutdown     <-chan struct{}
@@ -67,16 +76,21 @@ func (s *Session) Run(ctx context.Context) {
 
 	cred, ok := s.requestCredentials(ctx)
 	if !ok {
+		s.writeCloseMsg(websocket.CloseGoingAway, "server shutting down")
 		return
 	}
 	if cred.Err != nil {
+		log.Printf("session %s: credential error: %v", s.ID, cred.Err)
 		s.Events <- broker.SessionEvent{SessionID: s.ID, Type: broker.SessionError, Err: cred.Err}
+		s.writeCloseMsg(websocket.CloseInternalServerErr, "credential error")
 		return
 	}
 
 	rdp, err := s.dialRDP(ctx, cred)
 	if err != nil {
+		log.Printf("session %s: RDP connect error: %v", s.ID, err)
 		s.Events <- broker.SessionEvent{SessionID: s.ID, Type: broker.SessionError, Err: fmt.Errorf("rdp connect: %w", err)}
+		s.writeCloseMsg(websocket.CloseInternalServerErr, "RDP connection failed")
 		return
 	}
 	defer rdp.Close()
@@ -85,8 +99,22 @@ func (s *Session) Run(ctx context.Context) {
 	s.tileLoop(ctx, rdp, inputDone)
 }
 
-// requestCredentials asks the broker for temporary Windows credentials.
+// writeCloseMsg sends a WebSocket close frame to the client.
+func (s *Session) writeCloseMsg(code int, reason string) {
+	msg := websocket.FormatCloseMessage(code, reason)
+	_ = s.Conn.WriteControl(websocket.CloseMessage, msg, time.Now().Add(websocketCloseTimeout))
+}
+
+// requestCredentials asks the broker for temporary Windows credentials, or
+// returns the statically configured credentials if set.
 func (s *Session) requestCredentials(ctx context.Context) (broker.CredResponse, bool) {
+	if s.StaticUsername != "" {
+		return broker.CredResponse{
+			SessionID: s.ID,
+			Username:  s.StaticUsername,
+			Password:  s.StaticPassword,
+		}, true
+	}
 	responseCh := make(chan broker.CredResponse, 1)
 	select {
 	case s.CredRequests <- broker.CredRequest{SessionID: s.ID, Reply: responseCh}:

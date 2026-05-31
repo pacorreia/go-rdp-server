@@ -24,6 +24,12 @@ type Handlers struct {
 
 	RDPAddr string
 
+	// StaticRDPUsername and StaticRDPPassword, when non-empty, are used directly
+	// as RDP credentials for every session, bypassing the Windows temp-account
+	// broker. Set via --rdp-user / --rdp-pass flags or RDP_USER / RDP_PASS env vars.
+	StaticRDPUsername string
+	StaticRDPPassword string
+
 	// RDPDial, when non-nil, is forwarded to each session worker as a test hook.
 	RDPDial session.RDPDialFunc
 }
@@ -79,13 +85,15 @@ func (h *Handlers) HandleRDPWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	h.SessionEvent <- broker.SessionEvent{SessionID: sessionID, Type: broker.SessionOpened}
 	worker := &session.Session{
-		ID:           sessionID,
-		Conn:         conn,
-		RDPAddr:      h.RDPAddr,
-		CredRequests: h.CredRequests,
-		Events:       h.SessionEvent,
-		Shutdown:     h.Shutdown,
-		RDPDial:      h.RDPDial,
+		ID:             sessionID,
+		Conn:           conn,
+		RDPAddr:        h.RDPAddr,
+		StaticUsername: h.StaticRDPUsername,
+		StaticPassword: h.StaticRDPPassword,
+		CredRequests:   h.CredRequests,
+		Events:         h.SessionEvent,
+		Shutdown:       h.Shutdown,
+		RDPDial:        h.RDPDial,
 	}
 
 	go worker.Run(ctx)
