@@ -3,6 +3,7 @@ package display
 import (
 	"bytes"
 	"image/jpeg"
+	"net"
 	"sync"
 
 	"github.com/nakagami/grdp"
@@ -22,7 +23,9 @@ func Connect(addr, domain, username, password string, width, height int) (RDPSes
 		done:  make(chan struct{}),
 	}
 
-	c := grdp.NewRdpClient(addr, width, height, nil)
+	c := grdp.NewRdpClient(addr, width, height, func(hostPort string) (net.Conn, error) {
+		return net.Dial("tcp", hostPort)
+	})
 
 	c.OnError(func(_ error) { s.closeDone() })
 	c.OnClose(func() { s.closeDone() })

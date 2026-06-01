@@ -335,7 +335,15 @@ func (g *RdpClient) Login(domain string, user string, password string) error {
 // When routingToken is non-nil it replaces the username cookie in the
 // x224 Connection Request (required for Server Redirection).
 func (g *RdpClient) doLogin(routingToken []byte) error {
-	conn, err := g.dialer(g.hostPort)
+	var (
+		conn net.Conn
+		err  error
+	)
+	if g.dialer != nil {
+		conn, err = g.dialer(g.hostPort)
+	} else {
+		conn, err = net.Dial("tcp", g.hostPort)
+	}
 	if err != nil {
 		return fmt.Errorf("[dial err] %v", err)
 	}
