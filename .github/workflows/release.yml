@@ -37,6 +37,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           manifest=$(gh api "repos/${{ github.repository }}/contents/.release-please-manifest.json" --jq '.content' | base64 -d)
+          # The manifest key "." refers to the root package path used by release-please
           version=$(echo "$manifest" | jq -r '."."')
           tag="v${version}"
           if ! gh release view "$tag" --json tagName -q .tagName > /dev/null 2>&1; then
