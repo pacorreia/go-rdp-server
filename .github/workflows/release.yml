@@ -26,6 +26,7 @@ jobs:
         if: github.event_name == 'push'
         uses: googleapis/release-please-action@v5
         id: release
+        continue-on-error: true
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
