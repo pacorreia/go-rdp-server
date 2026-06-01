@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/pacorreia/go-rdp-server/compare/v1.3.0...v1.3.1) (2026-06-01)
+
+
+### Bug Fixes
+
+* Merge pull request [#25](https://github.com/pacorreia/go-rdp-server/issues/25) from pacorreia/copilot/fix-runtime-error-login ([f59b92d](https://github.com/pacorreia/go-rdp-server/commit/f59b92df80c23d0f868cde86745f6ef120ed88df))
+
 ## [1.3.0](https://github.com/pacorreia/go-rdp-server/compare/v1.2.0...v1.3.0) (2026-05-31)
 
 
